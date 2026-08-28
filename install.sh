@@ -4,7 +4,8 @@
 
 set -e
 
-REPO="GerhardOfRivia/slipway"
+PACKAGE="slipway"
+REPO="GerhardOfRivia/${PACKAGE}"
 INSTALL_DIR="${SLIPWAY_INSTALL_DIR:-$HOME/.local/bin}"
 
 # Colors
@@ -97,17 +98,17 @@ install() {
         fi
     fi
 
-    ASSET_NAME="${BINARY_NAME}-${TARGET}.tar"
+    ASSET_NAME="${PACKAGE}-${TARGET}.tar"
     DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${ASSET_NAME}"
     ARCHIVE="${TEMP_DIR}/${ASSET_NAME}"
 
     info "Downloading from: $DOWNLOAD_URL"
     if ! curl -fsSL "$DOWNLOAD_URL" -o "$ARCHIVE"; then
-        error "Failed to download ${BINARY_NAME}"
+        error "Failed to download ${PACKAGE}"
     fi
 
     if [ "${SLIPWAY_SKIP_CHECKSUM:-0}" != "1" ]; then
-        info "Verifying SHA-256 checksum for ${BINARY_NAME}..."
+        info "Verifying SHA-256 checksum for ${PACKAGE}..."
         EXPECTED=$(awk -v asset="$ASSET_NAME" '$2 == asset || $2 == "release/" asset { print $1; exit }' "$CHECKSUMS")
         if [ -z "$EXPECTED" ]; then
             error "checksum for ${ASSET_NAME} not found in checksums.txt — refusing to install"
@@ -123,14 +124,14 @@ install() {
         if [ "$EXPECTED" != "$ACTUAL" ]; then
             error "checksum mismatch for ${ASSET_NAME}! expected=${EXPECTED} actual=${ACTUAL} — refusing to install"
         fi
-        info "Checksum verified for ${BINARY_NAME}."
+        info "Checksum verified for ${PACKAGE}."
     fi
 
-    tar -xvf $ARCHIVE
+    tar -xvf $ARCHIVE -C $TEMP_DIR
 
     mkdir -p "$INSTALL_DIR"
-    for BINARY_NAME in "slipwayd slipway"; do
-        mv "${TEMP_DIR}/${BINARY_NAME}-${TARGET}" "${INSTALL_DIR}/${BINARY_NAME}"
+    for BINARY_NAME in slipwayd slipway; do
+        mv "${TEMP_DIR}/${BINARY_NAME}" "${INSTALL_DIR}/${BINARY_NAME}"
         chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
         info "Successfully installed ${BINARY_NAME} to ${INSTALL_DIR}/${BINARY_NAME}"
     done
@@ -142,7 +143,7 @@ install() {
 # Verify installation
 verify() {
     MISSING_FROM_PATH=0
-    for BINARY_NAME in "slipwayd slipway"; do
+    for BINARY_NAME in slipwayd slipway; do
         INSTALLED_BIN="${INSTALL_DIR}/${BINARY_NAME}"
         if [ -x "$INSTALLED_BIN" ]; then
             info "Verification: $("$INSTALLED_BIN" --version)"
