@@ -5,11 +5,12 @@ SLIPWAY_OUTPUT ?= $(OUTPUT)/slipway
 SLIPWAYD_OUTPUT ?= $(OUTPUT)/slipwayd
 SEMVER ?= 1.0.1
 VERSION ?= $(SEMVER)-dev
+RELEASE_TAG ?= v$(SEMVER)
 LDFLAGS = -ldflags "-X main.Version=$(VERSION)"
 GOOS ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
 
-.PHONY: all build web build-web-docker build-linux-amd64 build-linux-arm64 test clean
+.PHONY: all build web build-web-docker build-linux-amd64 build-linux-arm64 test release clean
 
 all: build
 
@@ -40,6 +41,12 @@ test:
 	go fmt ./...
 	go vet ./...
 	go test -v ./...
+
+release:
+	@test -z "$$(git status --porcelain)" || { echo "Refusing to release with a dirty working tree."; exit 1; }
+	@if git rev-parse --verify --quiet "refs/tags/$(RELEASE_TAG)" >/dev/null; then echo "Tag $(RELEASE_TAG) already exists."; exit 1; fi
+	git tag "$(RELEASE_TAG)"
+	git push origin "$(RELEASE_TAG)"
 
 clean:
 	@echo "Cleaning up..."
