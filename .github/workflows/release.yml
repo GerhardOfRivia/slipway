@@ -42,7 +42,7 @@ jobs:
         run: git diff --exit-code -- internal/webui/dist
 
   test:
-    name: Test on Linux
+    name: test on linux
     runs-on: ubuntu-latest
 
     steps:
@@ -58,7 +58,7 @@ jobs:
         run: make test
 
   build:
-    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+    name: build ${{ matrix.goos }}/${{ matrix.goarch }}
     runs-on: ubuntu-latest
     needs: [frontend, test]
 
@@ -108,7 +108,7 @@ jobs:
             dist/slipwayd-${{ matrix.goos }}-${{ matrix.goarch }}
 
   release:
-    name: Create GitHub Release
+    name: create GitHub release
     needs: build
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref_type == 'tag'
@@ -129,19 +129,18 @@ jobs:
 
       - name: Prepare Release Files
         run: |
-          mkdir -p release
+          ls -lah dist
+          mkdir -p release dist/linux-amd64 dist/linux-arm64
 
-          mv dist/slipway-linux-amd64/slipway-linux-amd64 dist/slipway-linux-amd64/slipway
-          (cd dist/slipway-linux-amd64 && sha256sum slipway >> ../linux-amd64-checksums.txt)
-          mv dist/slipwayd-linux-amd64/slipwayd-linux-amd64 dist/slipwayd-linux-amd64/slipwayd
-          (cd dist/slipwayd-linux-amd64 && sha256sum slipwayd >> ../linux-amd64-checksums.txt)
-          tar -cvf release/slipway-linux-amd64.tar dist/slipwayd-linux-amd64/slipwayd dist/slipway-linux-amd64/slipway dist/linux-amd64-checksums.txt
+          mv dist/slipway-linux-amd64 dist/linux-amd64/slipway
+          mv dist/slipwayd-linux-amd64 dist/linux-amd64/slipwayd
+          (cd dist/linux-amd64 && sha256sum slipway* > checksums.txt)
+          tar -cvf release/slipway-linux-amd64.tar dist/linux-amd64/*
 
-          mv dist/slipway-linux-arm64/slipway-linux-arm64 dist/slipway-linux-arm64/slipway
-          (cd dist/slipway-linux-arm64/ && sha256sum slipway >> ../linux-arm64-checksums.txt)
-          mv dist/slipwayd-linux-arm64/slipwayd-linux-arm64 dist/slipwayd-linux-arm64/slipwayd
-          (cd dist/slipwayd-linux-arm64/ && sha256sum slipwayd >> ../linux-arm64-checksums.txt)
-          tar -cvf release/slipway-linux-arm64.tar dist/slipwayd-linux-arm64/slipwayd dist/slipway-linux-arm64/slipway dist/linux-arm64-checksums.txt
+          mv dist/slipway-linux-arm64 dist/linux-arm64/slipway
+          mv dist/slipwayd-linux-arm64 dist/linux-arm64/slipwayd
+          (cd dist/linux-arm64/ && sha256sum slipway* > checksums.txt)
+          tar -cvf release/slipway-linux-arm64.tar dist/linux-arm64/*
 
           (cd release && sha256sum slipway-* > checksums.txt)
           ls -lah release
