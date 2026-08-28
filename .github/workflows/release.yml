@@ -133,13 +133,13 @@ jobs:
           
           (cd dist/slipway-linux-amd64 \
             && mv slipway-linux-amd64 slipway \
-            && slipwayd-linux-amd64 slipwayd \
+            && mv slipwayd-linux-amd64 slipwayd \
             && sha256sum slipway slipwayd > checksums.txt \
             && tar -cvf ../../release/slipway-linux-amd64.tar *)
 
           (cd dist/slipway-linux-arm64 \
             && mv slipway-linux-arm64 slipway \
-            && slipwayd-linux-arm64 slipwayd \
+            && mv slipwayd-linux-arm64 slipwayd \
             && sha256sum slipway slipwayd > checksums.txt \
             && tar -cvf ../../release/slipway-linux-arm64.tar *)
 
