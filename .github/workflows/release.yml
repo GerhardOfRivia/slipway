@@ -129,18 +129,18 @@ jobs:
 
       - name: Prepare Release Files
         run: |
-          ls -lah dist
-          mkdir -p release dist/linux-amd64 dist/linux-arm64
+          ls -lah dist/
+          mkdir -p release
 
-          mv dist/slipway-linux-amd64 dist/linux-amd64/slipway
-          mv dist/slipwayd-linux-amd64 dist/linux-amd64/slipwayd
-          (cd dist/linux-amd64 && sha256sum slipway* > checksums.txt)
-          tar -cvf release/slipway-linux-amd64.tar dist/linux-amd64/*
+          mv dist/slipway-linux-amd64/slipway-linux-amd64 dist/slipway-linux-amd64/slipway
+          mv dist/slipway-linux-amd64/slipwayd-linux-amd64 dist/slipway-linux-amd64/slipwayd
+          (cd dist/slipway-linux-amd64 && sha256sum slipway* > checksums.txt)
+          tar -cvf release/slipway-linux-amd64.tar -C dist/slipway-linux-amd64 dist/slipway-linux-amd64/*
 
-          mv dist/slipway-linux-arm64 dist/linux-arm64/slipway
-          mv dist/slipwayd-linux-arm64 dist/linux-arm64/slipwayd
-          (cd dist/linux-arm64/ && sha256sum slipway* > checksums.txt)
-          tar -cvf release/slipway-linux-arm64.tar dist/linux-arm64/*
+          mv dist/slipway-linux-arm64/slipway-linux-arm64 dist/slipway-linux-arm64/slipway
+          mv dist/slipway-linux-arm64/slipwayd-linux-arm64 dist/slipway-linux-arm64/slipwayd
+          (cd dist/slipway-linux-arm64/ && sha256sum slipway* > checksums.txt)
+          tar -cvf release/slipway-linux-arm64.tar -C dist/slipway-linux-arm64 dist/slipway-linux-arm64/*
 
           (cd release && sha256sum slipway-* > checksums.txt)
           ls -lah release
