@@ -1,0 +1,104 @@
+Date : 2026-08-28 09:16:09
+Directory : /home/g/git/slipway/internal
+Total : 64 files,  17189 codes, 509 comments, 1418 blanks, all 19116 lines
+
+Languages
++------------+------------+------------+------------+------------+------------+
+| language   | files      | code       | comment    | blank      | total      |
++------------+------------+------------+------------+------------+------------+
+| Go         |         60 |     17,138 |        507 |      1,410 |     19,055 |
+| JavaScript |          2 |         33 |          2 |          6 |         41 |
+| HTML       |          1 |         17 |          0 |          1 |         18 |
+| PostCSS    |          1 |          1 |          0 |          1 |          2 |
++------------+------------+------------+------------+------------+------------+
+
+Directories
++-------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                              | files      | code       | comment    | blank      | total      |
++-------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                 |         64 |     17,189 |        509 |      1,418 |     19,116 |
+| cli                                                               |          7 |      2,482 |         14 |        196 |      2,692 |
+| config                                                            |          8 |      2,301 |         71 |        176 |      2,548 |
+| control                                                           |         10 |      4,283 |        167 |        327 |      4,777 |
+| daemon                                                            |          4 |        626 |         18 |         62 |        706 |
+| executor                                                          |          5 |        680 |         54 |         75 |        809 |
+| queue                                                             |          6 |      1,717 |         73 |        155 |      1,945 |
+| watcher                                                           |         14 |      2,824 |         77 |        230 |      3,131 |
+| webui                                                             |          8 |      1,379 |         15 |        114 |      1,508 |
+| webui (Files)                                                     |          4 |      1,328 |         13 |        106 |      1,447 |
+| webui/dist                                                        |          4 |         51 |          2 |          8 |         61 |
+| webui/dist (Files)                                                |          2 |         41 |          2 |          6 |         49 |
+| webui/dist/assets                                                 |          2 |         10 |          0 |          2 |         12 |
+| worker                                                            |          2 |        897 |         20 |         83 |      1,000 |
++-------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++-------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| filename                                                          | language   | code       | comment    | blank      | total      |
++-------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| /home/g/git/slipway/internal/cli/check.go                         | Go         |        102 |          0 |         11 |        113 |
+| /home/g/git/slipway/internal/cli/check_test.go                    | Go         |        282 |          0 |         24 |        306 |
+| /home/g/git/slipway/internal/cli/cli.go                           | Go         |        566 |          5 |         46 |        617 |
+| /home/g/git/slipway/internal/cli/cli_test.go                      | Go         |        231 |          0 |         17 |        248 |
+| /home/g/git/slipway/internal/cli/daemon.go                        | Go         |        178 |          7 |         18 |        203 |
+| /home/g/git/slipway/internal/cli/managed.go                       | Go         |        376 |          2 |         33 |        411 |
+| /home/g/git/slipway/internal/cli/managed_test.go                  | Go         |        747 |          0 |         47 |        794 |
+| /home/g/git/slipway/internal/config/config.go                     | Go         |        431 |         40 |         39 |        510 |
+| /home/g/git/slipway/internal/config/config_test.go                | Go         |        688 |          0 |         25 |        713 |
+| /home/g/git/slipway/internal/config/discovery.go                  | Go         |        148 |          6 |         19 |        173 |
+| /home/g/git/slipway/internal/config/discovery_test.go             | Go         |        188 |          0 |         22 |        210 |
+| /home/g/git/slipway/internal/config/fingerprint.go                | Go         |         19 |          4 |          4 |         27 |
+| /home/g/git/slipway/internal/config/fingerprint_test.go           | Go         |        180 |          0 |         17 |        197 |
+| /home/g/git/slipway/internal/config/paths.go                      | Go         |        259 |         21 |         22 |        302 |
+| /home/g/git/slipway/internal/config/paths_test.go                 | Go         |        388 |          0 |         28 |        416 |
+| /home/g/git/slipway/internal/control/client.go                    | Go         |        326 |         21 |         27 |        374 |
+| /home/g/git/slipway/internal/control/client_test.go               | Go         |        133 |          0 |         19 |        152 |
+| /home/g/git/slipway/internal/control/logs.go                      | Go         |        248 |         19 |         23 |        290 |
+| /home/g/git/slipway/internal/control/logs_test.go                 | Go         |        127 |          0 |          9 |        136 |
+| /home/g/git/slipway/internal/control/manager.go                   | Go         |      1,086 |         60 |         71 |      1,217 |
+| /home/g/git/slipway/internal/control/manager_test.go              | Go         |      1,195 |          0 |         68 |      1,263 |
+| /home/g/git/slipway/internal/control/server.go                    | Go         |        573 |         31 |         51 |        655 |
+| /home/g/git/slipway/internal/control/server_test.go               | Go         |         16 |          0 |          3 |         19 |
+| /home/g/git/slipway/internal/control/transport_test.go            | Go         |        514 |          2 |         42 |        558 |
+| /home/g/git/slipway/internal/control/types.go                     | Go         |         65 |         34 |         14 |        113 |
+| /home/g/git/slipway/internal/daemon/daemon.go                     | Go         |         94 |          5 |         12 |        111 |
+| /home/g/git/slipway/internal/daemon/daemon_test.go                | Go         |        141 |          0 |         10 |        151 |
+| /home/g/git/slipway/internal/daemon/many.go                       | Go         |        139 |         13 |         13 |        165 |
+| /home/g/git/slipway/internal/daemon/many_test.go                  | Go         |        252 |          0 |         27 |        279 |
+| /home/g/git/slipway/internal/executor/executor.go                 | Go         |        232 |         38 |         30 |        300 |
+| /home/g/git/slipway/internal/executor/executor_test.go            | Go         |        246 |          1 |         20 |        267 |
+| /home/g/git/slipway/internal/executor/process_other.go            | Go         |          4 |          4 |          5 |         13 |
+| /home/g/git/slipway/internal/executor/process_unix.go             | Go         |         30 |          7 |          5 |         42 |
+| /home/g/git/slipway/internal/executor/process_unix_test.go        | Go         |        168 |          4 |         15 |        187 |
+| /home/g/git/slipway/internal/queue/commands.go                    | Go         |         98 |          2 |          6 |        106 |
+| /home/g/git/slipway/internal/queue/history.go                     | Go         |        333 |         12 |         25 |        370 |
+| /home/g/git/slipway/internal/queue/jobs.go                        | Go         |        309 |         12 |         22 |        343 |
+| /home/g/git/slipway/internal/queue/store.go                       | Go         |        240 |         22 |         38 |        300 |
+| /home/g/git/slipway/internal/queue/store_test.go                  | Go         |        610 |          4 |         46 |        660 |
+| /home/g/git/slipway/internal/queue/types.go                       | Go         |        127 |         21 |         18 |        166 |
+| /home/g/git/slipway/internal/watcher/backend_mode_darwin.go       | Go         |          2 |          4 |          3 |          9 |
+| /home/g/git/slipway/internal/watcher/backend_mode_darwin_test.go  | Go         |         19 |          1 |          5 |         25 |
+| /home/g/git/slipway/internal/watcher/backend_mode_linux_test.go   | Go         |         16 |          1 |          5 |         22 |
+| /home/g/git/slipway/internal/watcher/backend_mode_other.go        | Go         |          2 |          1 |          3 |          6 |
+| /home/g/git/slipway/internal/watcher/match.go                     | Go         |         71 |          5 |          7 |         83 |
+| /home/g/git/slipway/internal/watcher/match_test.go                | Go         |         71 |          0 |          5 |         76 |
+| /home/g/git/slipway/internal/watcher/polling.go                   | Go         |        121 |          3 |          9 |        133 |
+| /home/g/git/slipway/internal/watcher/polling_test.go              | Go         |        296 |          0 |         26 |        322 |
+| /home/g/git/slipway/internal/watcher/root_identity.go             | Go         |         68 |         14 |          8 |         90 |
+| /home/g/git/slipway/internal/watcher/root_identity_test.go        | Go         |        215 |          0 |         19 |        234 |
+| /home/g/git/slipway/internal/watcher/stable.go                    | Go         |        125 |         18 |         13 |        156 |
+| /home/g/git/slipway/internal/watcher/stable_test.go               | Go         |        107 |          0 |         12 |        119 |
+| /home/g/git/slipway/internal/watcher/watcher.go                   | Go         |        887 |         28 |         57 |        972 |
+| /home/g/git/slipway/internal/watcher/watcher_test.go              | Go         |        824 |          2 |         58 |        884 |
+| /home/g/git/slipway/internal/webui/api.go                         | Go         |        588 |          0 |         49 |        637 |
+| /home/g/git/slipway/internal/webui/api_test.go                    | Go         |        312 |          0 |         24 |        336 |
+| /home/g/git/slipway/internal/webui/dist/assets/index-Ch0TT8xm.css | PostCSS    |          1 |          0 |          1 |          2 |
+| /home/g/git/slipway/internal/webui/dist/assets/index-DG_S3TIe.js  | JavaScript |          9 |          0 |          1 |         10 |
+| /home/g/git/slipway/internal/webui/dist/index.html                | HTML       |         17 |          0 |          1 |         18 |
+| /home/g/git/slipway/internal/webui/dist/theme-init.js             | JavaScript |         24 |          2 |          5 |         31 |
+| /home/g/git/slipway/internal/webui/server.go                      | Go         |        309 |         13 |         27 |        349 |
+| /home/g/git/slipway/internal/webui/server_test.go                 | Go         |        119 |          0 |          6 |        125 |
+| /home/g/git/slipway/internal/worker/worker.go                     | Go         |        372 |         20 |         39 |        431 |
+| /home/g/git/slipway/internal/worker/worker_test.go                | Go         |        525 |          0 |         44 |        569 |
+| Total                                                             |            |     17,189 |        509 |      1,418 |     19,116 |
++-------------------------------------------------------------------+------------+------------+------------+------------+------------+

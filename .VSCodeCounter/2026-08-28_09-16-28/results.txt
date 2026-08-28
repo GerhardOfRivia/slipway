@@ -1,0 +1,47 @@
+Date : 2026-08-28 09:16:28
+Directory : /home/g/git/slipway/web
+Total : 14 files,  3628 codes, 4 comments, 133 blanks, all 3765 lines
+
+Languages
++--------------------+------------+------------+------------+------------+------------+
+| language           | files      | code       | comment    | blank      | total      |
++--------------------+------------+------------+------------+------------+------------+
+| JSON               |          4 |      1,894 |          0 |          4 |      1,898 |
+| TypeScript JSX     |          2 |        986 |          0 |         73 |      1,059 |
+| PostCSS            |          1 |        493 |          0 |         19 |        512 |
+| TypeScript         |          4 |        208 |          2 |         30 |        240 |
+| JavaScript         |          1 |         24 |          2 |          5 |         31 |
+| HTML               |          1 |         16 |          0 |          1 |         17 |
+| JSON with Comments |          1 |          7 |          0 |          1 |          8 |
++--------------------+------------+------------+------------+------------+------------+
+
+Directories
++----------------------------------------------+------------+------------+------------+------------+------------+
+| path                                         | files      | code       | comment    | blank      | total      |
++----------------------------------------------+------------+------------+------------+------------+------------+
+| .                                            |         14 |      3,628 |          4 |        133 |      3,765 |
+| . (Files)                                    |          7 |      1,926 |          0 |          8 |      1,934 |
+| public                                       |          1 |         24 |          2 |          5 |         31 |
+| src                                          |          6 |      1,678 |          2 |        120 |      1,800 |
++----------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++----------------------------------------------+--------------------+------------+------------+------------+------------+
+| filename                                     | language           | code       | comment    | blank      | total      |
++----------------------------------------------+--------------------+------------+------------+------------+------------+
+| /home/g/git/slipway/web/index.html           | HTML               |         16 |          0 |          1 |         17 |
+| /home/g/git/slipway/web/package-lock.json    | JSON               |      1,841 |          0 |          1 |      1,842 |
+| /home/g/git/slipway/web/package.json         | JSON               |         22 |          0 |          1 |         23 |
+| /home/g/git/slipway/web/public/theme-init.js | JavaScript         |         24 |          2 |          5 |         31 |
+| /home/g/git/slipway/web/src/App.tsx          | TypeScript JSX     |        977 |          0 |         71 |      1,048 |
+| /home/g/git/slipway/web/src/api.ts           | TypeScript         |         59 |          1 |          6 |         66 |
+| /home/g/git/slipway/web/src/main.tsx         | TypeScript JSX     |          9 |          0 |          2 |         11 |
+| /home/g/git/slipway/web/src/styles.css       | PostCSS            |        493 |          0 |         19 |        512 |
+| /home/g/git/slipway/web/src/theme.ts         | TypeScript         |         36 |          1 |          9 |         46 |
+| /home/g/git/slipway/web/src/types.ts         | TypeScript         |        104 |          0 |         13 |        117 |
+| /home/g/git/slipway/web/tsconfig.app.json    | JSON               |         20 |          0 |          1 |         21 |
+| /home/g/git/slipway/web/tsconfig.json        | JSON with Comments |          7 |          0 |          1 |          8 |
+| /home/g/git/slipway/web/tsconfig.node.json   | JSON               |         11 |          0 |          1 |         12 |
+| /home/g/git/slipway/web/vite.config.ts       | TypeScript         |          9 |          0 |          2 |         11 |
+| Total                                        |                    |      3,628 |          4 |        133 |      3,765 |
++----------------------------------------------+--------------------+------------+------------+------------+------------+

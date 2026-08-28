@@ -1,0 +1,44 @@
+[Unit]
+Description=slipway file-triggered job runner
+Documentation=https://github.com/GerhardOfRivia/slipway
+After=local-fs.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=slipway
+Group=slipway
+
+# Override either value in /etc/default/slipway when another bootstrap selection
+# or socket is preferred. The leading '-' makes the environment file optional.
+Environment=SLIPWAY_CONFIG=/etc/slipway.d
+Environment=SLIPWAY_SOCKET=/run/slipway/slipway.sock
+# Set SLIPWAY_WEB_LISTEN=127.0.0.1:8080 in /etc/default/slipway to opt in to the
+# token-protected dashboard. It is intentionally disabled by default.
+EnvironmentFile=-/etc/default/slipway
+
+ExecStart=/usr/local/bin/slipwayd
+WorkingDirectory=/var/lib/slipway
+
+# systemd creates the persistent queue-data and private runtime directories and
+# keeps them owned by the service account.
+StateDirectory=slipway
+StateDirectoryMode=0750
+RuntimeDirectory=slipway
+RuntimeDirectoryMode=0700
+UMask=0027
+
+Restart=on-failure
+RestartSec=5s
+# Allow the daemon's 30-second graceful-shutdown budget plus cleanup headroom.
+TimeoutStopSec=45s
+KillSignal=SIGTERM
+KillMode=mixed
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=slipway
+
+[Install]
+WantedBy=multi-user.target

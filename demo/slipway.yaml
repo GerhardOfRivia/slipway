@@ -1,0 +1,45 @@
+queue:
+  workers: 2
+  max_retries: 3
+  retry_delay: 10s
+
+database:
+  path: ./image/slipway.db
+
+watches:
+  - name: demo-openalpr
+    path: ./image
+    recursive: false
+    process_existing: true
+    reprocess_on_change: false
+    include:
+      - "*.jpg"
+    exclude:
+      - "*.partial"
+    settle_for: 3s
+
+    pipeline:
+      - name: openalpr
+        executor: docker
+        image: openalpr/openalpr:latest
+        container_args:
+          - "--rm"
+        mounts:
+          - source: "{{dir}}"
+            target: /data
+            read_only: true
+        command_args:
+          - "--json"
+          - "--country"
+          - "eu"
+          - "/data/{{basename}}"
+        timeout: 15m
+        working_directory: "{{dir}}"
+        output: "{{stem}}.json"
+      - name: rm
+        executor: command
+        program: /usr/bin/rm
+        args:
+          - "{{file}}"
+        timeout: 15m
+        working_directory: "{{dir}}"

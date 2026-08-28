@@ -19,6 +19,11 @@ profile.cov
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+.go/
+bin/
+demo/image/
+web/node_modules/
+*.tsbuildinfo
 
 # Go workspace file
 go.work

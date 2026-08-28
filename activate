@@ -1,0 +1,7 @@
+#!/bin/bash
+export SLIPWAY_GO_DIR="$(pwd)/.go"
+
+export PATH="$SLIPWAY_GO_DIR/toolchain/bin:$PATH"
+export GOPATH="$SLIPWAY_GO_DIR/gopath"
+export GOMODCACHE="$SLIPWAY_GO_DIR/modcache"
+export GOCACHE="$SLIPWAY_GO_DIR/buildcache"
