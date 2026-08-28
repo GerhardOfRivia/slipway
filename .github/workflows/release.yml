@@ -129,9 +129,10 @@ jobs:
 
       - name: Prepare Release Files
         run: |
-          ls -lah dist/
           mkdir -p release
 
+          ls -lah dist/
+          ls -lah dist/slipway-linux-amd64/
           mv dist/slipway-linux-amd64/slipway-linux-amd64 dist/slipway-linux-amd64/slipway
           mv dist/slipway-linux-amd64/slipwayd-linux-amd64 dist/slipway-linux-amd64/slipwayd
           (cd dist/slipway-linux-amd64 && sha256sum slipway* > checksums.txt)
