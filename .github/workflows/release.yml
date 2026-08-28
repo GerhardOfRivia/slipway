@@ -42,12 +42,8 @@ jobs:
         run: git diff --exit-code -- internal/webui/dist
 
   test:
-    name: Test on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
+    name: Test on Linux
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Code
@@ -72,10 +68,6 @@ jobs:
           - goos: linux
             goarch: amd64
           - goos: linux
-            goarch: arm64
-          - goos: darwin
-            goarch: amd64
-          - goos: darwin
             goarch: arm64
 
     steps:
@@ -148,16 +140,6 @@ jobs:
           mv dist/slipway-linux-arm64/slipwayd-linux-arm64 dist/slipway-linux-arm64/slipwayd
           (cd dist/slipway-linux-arm64/ && sha256sum slipway-* slipwayd-* > checksums.txt)
           tar -cvf release/slipway-linux-arm64.tar dist/slipway-linux-arm64/slipwayd dist/slipway-linux-arm64/slipway dist/slipway-linux-arm64/checksums.txt
-          
-          mv dist/slipway-darwin-amd64/slipway-darwin-amd64 dist/slipway-darwin-amd64/slipway
-          mv dist/slipway-darwin-amd64/slipwayd-darwin-amd64 dist/slipway-darwin-amd64/slipwayd
-          (cd dist/slipway-darwin-amd64/ && sha256sum slipway-* slipwayd-* > checksums.txt)
-          tar -cvf release/slipway-darwin-amd64.tar dist/slipway-darwin-amd64/slipwayd dist/slipway-darwin-amd64/slipway dist/slipway-darwin-amd64/checksums.txt
-
-          cp dist/slipway-darwin-arm64/slipway-darwin-arm64 release/
-          cp dist/slipway-darwin-arm64/slipwayd-darwin-arm64 release/
-          (cd dist/slipway-darwin-arm64/ && sha256sum slipway-* slipwayd-* > checksums.txt)
-          tar -cvf release/slipway-darwin-arm64.tar dist/slipway-darwin-arm64/slipwayd dist/slipway-darwin-arm64/slipway dist/slipway-darwin-arm64/checksums.txt
 
           (cd release && sha256sum slipway-* > checksums.txt)
           ls -lah release

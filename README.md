@@ -15,7 +15,8 @@ written and designed with help from openai's (5.6 sol)
 curl -fsSL https://raw.githubusercontent.com/GerhardOfRivia/slipway/refs/heads/main/install.sh | sh
 ```
 
-The installer places both `slipway` and `slipwayd` in the selected install directory.
+slipway supports Linux on AMD64 and ARM64. The installer places both `slipway`
+and `slipwayd` in the selected install directory.
 
 ## getting started
 
@@ -434,17 +435,6 @@ incompatible watch instead of leaving an apparently running but incomplete
 instance; a one-interval grace lets queued rename/remove events reconcile
 first.
 
-Linux uses filesystem notifications. On macOS, slipway uses bounded stateful
-polling every 500 milliseconds because kqueue-based directory watchers open a
-file descriptor for every existing entry. A macOS instance tracks at most 4,096
-matching `(watch, path)` entries across its polling snapshot, in addition to the
-directory and settling limits above. The initial snapshot honors
-`process_existing`: unchanged files present at startup are ignored when it is
-false, while later creations and size/modification-time changes are scheduled.
-A file created and removed entirely between polls can be missed, so watched
-inputs should remain in place through at least one polling interval and their
-configured settle period.
-
 Captured stdout and stderr are each limited to their first 1 MiB per command.
 When output exceeds that limit, the stored stream ends with a truncation marker
 instead of allowing one command to consume unbounded runner memory or database
@@ -464,7 +454,7 @@ just before a host or runner crash but be executed again after recovery, so
 pipelines should be idempotent. Use one database per config. Stopping a managed
 instance or interrupting a foreground run cancels its active commands, persists
 their failed attempts when possible, stops its watcher, and waits for its workers
-to exit. On Linux and macOS, cancellation kills the command's process group,
+to exit. On Linux, cancellation kills the command's process group,
 which includes ordinary descendants; a descendant that deliberately creates a
 new session or process group is outside that guarantee. Output-pipe cleanup is
 time-bounded so an escaped descendant cannot indefinitely block shutdown merely
@@ -537,8 +527,8 @@ per-user daemon is recommended for interactive and user-owned workloads.
 ## architecture
 
 - `internal/config`: discovery, strict YAML decoding, defaults, and validation
-- `internal/watcher`: Linux filesystem events, bounded macOS polling, recursive
-  discovery, matching, and settling
+- `internal/watcher`: Linux filesystem events, recursive discovery, matching,
+  and settling
 - `internal/queue`: SQLite jobs, runs, command history, claims, and recovery
 - `internal/executor`: backend interface and safe local process executor
 - `internal/worker`: concurrent consumers and sequential pipeline execution
@@ -560,9 +550,8 @@ Slurm or Flux.
 
 If Go is not installed, or you want to keep the toolchain and its caches out of
 your home directory, you can download Go into a temporary directory. This
-example uses Go 1.27.0 for Linux on AMD64; choose another published version,
-operating system, or architecture from [go.dev/dl](https://go.dev/dl/) when
-needed.
+example uses Go 1.27.0 for Linux on AMD64; choose another published version or
+supported Linux architecture from [go.dev/dl](https://go.dev/dl/) when needed.
 
 ```bash
 export SLIPWAY_GO_VERSION=1.27.0
@@ -592,8 +581,7 @@ go mod download
 artifacts. You do not need to set `GOROOT`; the Go binary discovers its own
 toolchain directory. These exports affect only the current shell.
 
-For Linux on ARM64, set `SLIPWAY_GO_ARCH=arm64`. For macOS, set
-`SLIPWAY_GO_OS=darwin` and use `amd64` or `arm64` as appropriate.
+For Linux on ARM64, set `SLIPWAY_GO_ARCH=arm64`.
 
 To remove the temporary toolchain and caches when you are finished:
 

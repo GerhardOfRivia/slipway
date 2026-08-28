@@ -28,9 +28,6 @@ var (
 	// ErrWatchRootLost identifies a configured root path that no longer reaches
 	// the directory registered at startup, including after ancestor replacement.
 	ErrWatchRootLost = errors.New("configured watch root was removed or renamed")
-	// ErrPolledFileLimit identifies a macOS polling snapshot whose matching
-	// watch/path entries reached the instance safety limit.
-	ErrPolledFileLimit = errors.New("polled file limit reached")
 	// ErrFilesystemWatchLost identifies a mismatch between slipway's registered
 	// directory set and the operating-system notification backend.
 	ErrFilesystemWatchLost = errors.New("filesystem watch registration was lost")

@@ -280,6 +280,32 @@ func TestWatcherRejectsSymlinkRoot(t *testing.T) {
 	}
 }
 
+func TestWatcherCloseStopsRun(t *testing.T) {
+	root := t.TempDir()
+	instance := newTestWatcher(t, config.WatchConfig{
+		Name: "incoming",
+		Path: root,
+	}, func(context.Context, config.WatchConfig, File) error { return nil })
+	defer instance.Close()
+
+	result := make(chan error, 1)
+	go func() {
+		result <- instance.Run(context.Background())
+	}()
+	waitForDirectory(t, instance, root)
+	if err := instance.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-result:
+		if err != nil {
+			t.Fatalf("Run() error after Close() = %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Run did not stop after Close")
+	}
+}
+
 func TestWatcherReportsConfiguredRootLoss(t *testing.T) {
 	root := t.TempDir()
 	instance := newTestWatcher(t, config.WatchConfig{
@@ -321,9 +347,6 @@ func TestWatchedDirectoryTreeIsDeepestFirst(t *testing.T) {
 }
 
 func TestRemoveDirectoryTreeRemovesDescendantWatchesAndToleratesMissing(t *testing.T) {
-	if usePollingBackend {
-		t.Skip("macOS polling does not allocate fsnotify directory watches")
-	}
 	root := t.TempDir()
 	subtree := filepath.Join(root, "subtree")
 	nested := filepath.Join(subtree, "nested")
@@ -415,18 +438,13 @@ func TestAddDirectoryRebindsMovedDirectoryFromStalePath(t *testing.T) {
 	if hasOldPath || !hasNewPath {
 		t.Fatalf("moved watch bookkeeping: old=%t new=%t", hasOldPath, hasNewPath)
 	}
-	if instance.filesystem != nil {
-		watches := instance.filesystem.WatchList()
-		if watchListContains(watches, oldPath) || !watchListContains(watches, newPath) {
-			t.Fatalf("moved filesystem watch list = %v", watches)
-		}
+	watches := instance.filesystem.WatchList()
+	if watchListContains(watches, oldPath) || !watchListContains(watches, newPath) {
+		t.Fatalf("moved filesystem watch list = %v", watches)
 	}
 }
 
 func TestFilesystemWatchValidationFailsPersistentLostDirectory(t *testing.T) {
-	if usePollingBackend {
-		t.Skip("macOS uses bounded polling rather than filesystem watches")
-	}
 	root := t.TempDir()
 	nested := filepath.Join(root, "nested")
 	if err := os.MkdirAll(nested, 0o700); err != nil {
@@ -462,9 +480,6 @@ func TestFilesystemWatchValidationFailsPersistentLostDirectory(t *testing.T) {
 }
 
 func TestFilesystemWatchValidationAllowsQueuedRemovalToReconcile(t *testing.T) {
-	if usePollingBackend {
-		t.Skip("macOS uses bounded polling rather than filesystem watches")
-	}
 	root := t.TempDir()
 	nested := filepath.Join(root, "nested")
 	if err := os.Mkdir(nested, 0o700); err != nil {
@@ -498,9 +513,6 @@ func TestFilesystemWatchValidationAllowsQueuedRemovalToReconcile(t *testing.T) {
 }
 
 func TestFilesystemWatchValidationFailsPersistentIdentityChange(t *testing.T) {
-	if usePollingBackend {
-		t.Skip("macOS uses bounded polling rather than filesystem watches")
-	}
 	root := t.TempDir()
 	nested := filepath.Join(root, "nested")
 	if err := os.Mkdir(nested, 0o700); err != nil {
@@ -848,12 +860,10 @@ func waitForDirectoryTreeRemoval(t *testing.T, instance *Watcher, directory stri
 		bookkeeping := watchedDirectoryTree(instance.watchedDirs, directory)
 		instance.mu.Unlock()
 		registered := false
-		if instance.filesystem != nil {
-			for _, watched := range instance.filesystem.WatchList() {
-				if within(directory, filepath.Clean(watched)) {
-					registered = true
-					break
-				}
+		for _, watched := range instance.filesystem.WatchList() {
+			if within(directory, filepath.Clean(watched)) {
+				registered = true
+				break
 			}
 		}
 		if len(bookkeeping) == 0 && !registered {
@@ -864,10 +874,7 @@ func waitForDirectoryTreeRemoval(t *testing.T, instance *Watcher, directory stri
 	instance.mu.Lock()
 	bookkeeping := watchedDirectoryTree(instance.watchedDirs, directory)
 	instance.mu.Unlock()
-	var filesystemWatches []string
-	if instance.filesystem != nil {
-		filesystemWatches = instance.filesystem.WatchList()
-	}
+	filesystemWatches := instance.filesystem.WatchList()
 	t.Fatalf("directory tree %q was not removed: bookkeeping=%v fsnotify=%v", directory, bookkeeping, filesystemWatches)
 }
 

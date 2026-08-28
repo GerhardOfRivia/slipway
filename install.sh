@@ -30,7 +30,6 @@ error() {
 detect_os() {
     case "$(uname -s)" in
         Linux*)  OS="linux";;
-        Darwin*) OS="darwin";;
         *)       error "Unsupported operating system: $(uname -s)";;
     esac
 }
@@ -76,12 +75,6 @@ get_target() {
                 aarch64) TARGET="linux-arm64";;
             esac
             ;;
-        darwin)
-            case "$ARCH" in
-                x86_64)  TARGET="darwin-amd64";;
-                aarch64) TARGET="darwin-arm64";;
-            esac
-            ;;
     esac
 }
 
@@ -119,7 +112,7 @@ install() {
         if [ -z "$EXPECTED" ]; then
             error "checksum for ${ASSET_NAME} not found in checksums.txt — refusing to install"
         fi
-        # sha256sum (Linux GNU) vs shasum -a 256 (macOS) — prefer whichever is available.
+        # Prefer sha256sum, with shasum as a portable fallback.
         if command -v sha256sum >/dev/null 2>&1; then
             ACTUAL=$(sha256sum "$ARCHIVE" | awk '{print $1}')
         elif command -v shasum >/dev/null 2>&1; then
@@ -149,7 +142,7 @@ install() {
 # Verify installation
 verify() {
     MISSING_FROM_PATH=0
-    for BINARY_NAME in $BINARY_NAMES; do
+    for BINARY_NAME in "slipwayd slipway"; do
         INSTALLED_BIN="${INSTALL_DIR}/${BINARY_NAME}"
         if [ -x "$INSTALLED_BIN" ]; then
             info "Verification: $("$INSTALLED_BIN" --version)"

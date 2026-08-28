@@ -9,21 +9,18 @@ LDFLAGS = -ldflags "-X main.Version=$(VERSION)"
 GOOS ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
 
-.PHONY: all build web build-web-docker build-linux-amd64 build-linux-arm64 build-darwin-amd64 build-darwin-arm64 test clean
+.PHONY: all build web build-web-docker build-linux-amd64 build-linux-arm64 test clean
 
 all: build
+
+activate:
+	source activate
 
 build-linux-amd64:
 	$(MAKE) build GOOS=linux GOARCH=amd64 CGO_ENABLED=0 SLIPWAY_OUTPUT=bin/slipway-linux-amd64 SLIPWAYD_OUTPUT=bin/slipwayd-linux-amd64
 
 build-linux-arm64:
 	$(MAKE) build GOOS=linux GOARCH=arm64 CGO_ENABLED=0 SLIPWAY_OUTPUT=bin/slipway-linux-arm64 SLIPWAYD_OUTPUT=bin/slipwayd-linux-arm64
-
-build-darwin-amd64:
-	$(MAKE) build GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 SLIPWAY_OUTPUT=bin/slipway-darwin-amd64 SLIPWAYD_OUTPUT=bin/slipwayd-darwin-amd64
-
-build-darwin-arm64:
-	$(MAKE) build GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 SLIPWAY_OUTPUT=bin/slipway-darwin-arm64 SLIPWAYD_OUTPUT=bin/slipwayd-darwin-arm64
 
 build:
 	@echo "Building $(SLIPWAY_OUTPUT) for $(GOOS)/$(GOARCH) with version $(VERSION)..."

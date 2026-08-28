@@ -1,5 +1,5 @@
-// Package watcher discovers stable files using filesystem events or bounded
-// stateful polling, plus race-resistant directory scans.
+// Package watcher discovers stable files using filesystem events and
+// race-resistant directory scans.
 package watcher
 
 import (
@@ -27,7 +27,6 @@ const (
 	maxPendingFiles        = 1024
 	maxDeliveredFiles      = 4096
 	rootIdentityInterval   = time.Second
-	pollingInterval        = 500 * time.Millisecond
 )
 
 var errQueuedDirectoryChanged = errors.New("queued directory changed before scan")
@@ -60,8 +59,6 @@ type Watcher struct {
 	watchedDirs   map[string]struct{}
 	watchedDirIDs map[string]os.FileInfo
 	rootIDs       rootIdentitySet
-	pollSnapshot  pollingSnapshot
-	polling       bool
 	watchMismatch string
 	running       bool
 	closed        bool
@@ -84,21 +81,15 @@ func New(watches []config.WatchConfig, handler Handler, logger *slog.Logger) (*W
 		logger = slog.Default()
 	}
 
-	var filesystem *fsnotify.Watcher
-	if !usePollingBackend {
-		var err error
-		filesystem, err = fsnotify.NewWatcher()
-		if err != nil {
-			return nil, fmt.Errorf("create filesystem watcher: %w", err)
-		}
+	filesystem, err := fsnotify.NewWatcher()
+	if err != nil {
+		return nil, fmt.Errorf("create filesystem watcher: %w", err)
 	}
 	specs := make([]watchSpec, 0, len(watches))
 	for _, watch := range watches {
 		root, err := filepath.Abs(watch.Path)
 		if err != nil {
-			if filesystem != nil {
-				_ = filesystem.Close()
-			}
+			_ = filesystem.Close()
 			return nil, fmt.Errorf("resolve watch %q path: %w", watch.Name, err)
 		}
 		specs = append(specs, watchSpec{config: watch, root: filepath.Clean(root)})
@@ -114,8 +105,6 @@ func New(watches []config.WatchConfig, handler Handler, logger *slog.Logger) (*W
 		watchedDirs:   make(map[string]struct{}),
 		watchedDirIDs: make(map[string]os.FileInfo),
 		rootIDs:       make(rootIdentitySet),
-		pollSnapshot:  make(pollingSnapshot),
-		polling:       usePollingBackend,
 		errors:        make(chan error, 1),
 		closedSignal:  make(chan struct{}),
 	}, nil
@@ -160,50 +149,23 @@ func (w *Watcher) Run(ctx context.Context) error {
 	if err := w.rootIDs.validateAll(); err != nil {
 		return err
 	}
-	if w.polling {
-		if err := w.pollOnce(runContext, true); err != nil {
-			if runContext.Err() != nil {
-				return nil
-			}
-			return err
+	for i := range w.watches {
+		if !w.watches[i].config.ProcessExisting {
+			continue
 		}
-	} else {
-		for i := range w.watches {
-			if !w.watches[i].config.ProcessExisting {
-				continue
-			}
-			if err := w.discoverExisting(runContext, i); err != nil {
-				return err
-			}
+		if err := w.discoverExisting(runContext, i); err != nil {
+			return err
 		}
 	}
 	rootIdentityTicker := time.NewTicker(rootIdentityInterval)
 	defer rootIdentityTicker.Stop()
-	var pollingTicker *time.Ticker
-	var pollingEvents <-chan time.Time
-	if w.polling {
-		pollingTicker = time.NewTicker(pollingInterval)
-		pollingEvents = pollingTicker.C
-		defer pollingTicker.Stop()
-	}
-	var filesystemErrors <-chan error
-	var filesystemEvents <-chan fsnotify.Event
-	if w.filesystem != nil {
-		filesystemErrors = w.filesystem.Errors
-		filesystemEvents = w.filesystem.Events
-	}
+	filesystemErrors := w.filesystem.Errors
+	filesystemEvents := w.filesystem.Events
 
 	for {
 		select {
 		case <-runContext.Done():
 			return nil
-		case <-pollingEvents:
-			if err := w.pollOnce(runContext, false); err != nil {
-				if runContext.Err() != nil {
-					return nil
-				}
-				return err
-			}
 		case <-rootIdentityTicker.C:
 			if err := w.rootIDs.validateAll(); err != nil {
 				return err
@@ -244,9 +206,7 @@ func (w *Watcher) Close() error {
 		w.closed = true
 		w.mu.Unlock()
 		close(w.closedSignal)
-		if w.filesystem != nil {
-			closeErr = w.filesystem.Close()
-		}
+		closeErr = w.filesystem.Close()
 	})
 	return closeErr
 }
@@ -273,9 +233,6 @@ func (w *Watcher) addConfiguredDirectories(ctx context.Context, spec watchSpec) 
 	}
 	if err := w.rootIDs.add(spec, info); err != nil {
 		return err
-	}
-	if w.polling {
-		return nil
 	}
 	if !spec.config.Recursive {
 		return w.addDirectory(spec.root, info)
@@ -306,7 +263,7 @@ func (w *Watcher) addDirectory(directory string, expected os.FileInfo) error {
 		registeredIdentity := w.watchedDirIDs[directory]
 		if alreadyWatched && (registeredIdentity == nil || os.SameFile(registeredIdentity, current)) {
 			w.mu.Unlock()
-			if w.filesystem == nil || watchListContains(w.filesystem.WatchList(), directory) {
+			if watchListContains(w.filesystem.WatchList(), directory) {
 				return nil
 			}
 			if err := w.filesystem.Add(directory); err != nil {
@@ -377,20 +334,15 @@ func (w *Watcher) addDirectory(directory string, expected os.FileInfo) error {
 		}
 	}
 
-	if w.filesystem != nil {
-		if err := w.filesystem.Add(directory); err != nil {
-			return fmt.Errorf("watch directory %s: %w", directory, err)
-		}
+	if err := w.filesystem.Add(directory); err != nil {
+		return fmt.Errorf("watch directory %s: %w", directory, err)
 	}
 	current, err = verifiedDirectoryInfo(directory, current)
 	if err != nil {
-		var removeErr error
-		if w.filesystem != nil {
-			removeErr = w.filesystem.Remove(directory)
-		}
+		removeErr := w.filesystem.Remove(directory)
 		return errors.Join(err, removeErr)
 	}
-	if w.filesystem != nil && !watchListContains(w.filesystem.WatchList(), directory) {
+	if !watchListContains(w.filesystem.WatchList(), directory) {
 		removeErr := w.filesystem.Remove(directory)
 		return errors.Join(
 			fmt.Errorf("verify filesystem watch for directory %s: %w", directory, ErrDirectoryChanged),
@@ -427,9 +379,6 @@ func watchListContains(watches []string, directory string) bool {
 }
 
 func (w *Watcher) validateFilesystemWatches() error {
-	if w.filesystem == nil {
-		return nil
-	}
 	w.mu.Lock()
 	if w.closed {
 		w.mu.Unlock()
@@ -680,7 +629,7 @@ func walkTreeBatched(
 		)
 		if directory.relative != "." && (errors.Is(err, os.ErrNotExist) || errors.Is(err, errQueuedDirectoryChanged)) {
 			// A child can legitimately disappear or be replaced during a live
-			// scan. Its parent remains watched (or will be polled again), so
+			// scan. Its parent remains watched, so
 			// continue with sibling directories instead of failing the instance.
 			continue
 		}
@@ -789,15 +738,10 @@ func (w *Watcher) removeDirectoryTree(directory string) error {
 
 	var resultErr error
 	registered := make(map[string]struct{})
-	if w.filesystem != nil {
-		for _, watched := range w.filesystem.WatchList() {
-			registered[filepath.Clean(watched)] = struct{}{}
-		}
+	for _, watched := range w.filesystem.WatchList() {
+		registered[filepath.Clean(watched)] = struct{}{}
 	}
 	for _, watched := range directories {
-		if w.filesystem == nil {
-			continue
-		}
 		if _, exists := registered[filepath.Clean(watched)]; !exists {
 			continue
 		}
