@@ -75,9 +75,10 @@ func (d Duration) MarshalYAML() (any, error) {
 
 // Config is the complete slipway configuration.
 type Config struct {
-	Queue    QueueConfig    `yaml:"queue"`
-	Database DatabaseConfig `yaml:"database"`
-	Watches  []WatchConfig  `yaml:"watches"`
+	Queue    QueueConfig       `yaml:"queue"`
+	Database DatabaseConfig    `yaml:"database"`
+	Values   map[string]string `yaml:"values" json:"-"`
+	Watches  []WatchConfig     `yaml:"watches"`
 }
 
 // QueueConfig controls worker concurrency and retry behavior.
@@ -384,6 +385,9 @@ func (c *Config) ApplyDefaults() {
 func (c *Config) Validate() error {
 	if c == nil {
 		return errors.New("config is nil")
+	}
+	if err := c.expandValues(); err != nil {
+		return err
 	}
 	if c.Queue.Workers <= 0 {
 		return errors.New("queue.workers must be greater than zero")

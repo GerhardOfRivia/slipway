@@ -73,14 +73,15 @@ slipway check --raw --config csv_pipeline.yaml
 `check` uses the same file, directory, `SLIPWAY_CONFIG`, and default discovery
 rules as the other config-aware commands. It does not contact the daemon or
 open the queue database. Program paths in the display reflect config-relative
-path resolution, while job-dependent templates such as `{{file}}` remain
-unexpanded. By default, each invocation is displayed as a readable shell-like
-command line, with spaces and shell syntax safely single-quoted. This is only a
-presentation format: slipway still executes the program and argument vector
-directly, without a shell. `check --raw` selects the previous, authoritative
-representation consisting of a quoted program followed by its JSON argument
-array. Pipeline steps run in numbered order and are not shell pipes. Commands
-with an output file also show their configured output path.
+path resolution, reusable `values` are expanded, and job-dependent templates
+such as `{{file}}` remain unexpanded. By default, each invocation is displayed
+as a readable shell-like command line, with spaces and shell syntax safely
+single-quoted. This is only a presentation format: slipway still executes the
+program and argument vector directly, without a shell. `check --raw` selects
+the previous, authoritative representation consisting of a quoted program
+followed by its JSON argument array. Pipeline steps run in numbered order and
+are not shell pipes. Commands with an output file also show their configured
+output path.
 
 ## generating pipeline configuration
 
@@ -88,28 +89,51 @@ with an output file also show their configured output path.
 without executing it. Use `--` to separate slipway's options from the command:
 
 ```bash
-slipway parse -- docker run --rm --gpus all nvidia/cuda:12.8.1-base-ubuntu24.04 nvidia-smi
+slipway parse -- docker run --rm --gpus all \
+  --mount 'type=bind,source={{dir}},target=/input,readonly' \
+  --env 'INPUT={{basename}}' \
+  nvidia/cuda:12.8.1-base-ubuntu24.04 nvidia-smi --query-gpu=name
 ```
 
 ```yaml
 pipeline:
   - name: docker-run
     executor: docker
-    args:
-      - run
+    image: nvidia/cuda:12.8.1-base-ubuntu24.04
+    container_args:
       - --rm
       - --gpus
       - all
-      - nvidia/cuda:12.8.1-base-ubuntu24.04
+    mounts:
+      - source: '{{dir}}'
+        target: /input
+        read_only: true
+    container_env:
+      INPUT: '{{basename}}'
     command: nvidia-smi
+    command_args:
+      - --query-gpu=name
 ```
 
 Paste the fragment under a watch, adjusting its indentation to match that
-watch. `--name` overrides the generated step name. Docker, Podman, and
-Apptainer invocations use the lossless raw `args` form, so every argument is
-preserved exactly and slipway does not guess where runtime options, the image,
-or the container command begin. Other executables generate a normal `command`
-entry with `program` and `args` fields.
+watch. `--name` overrides the generated step name. For direct Docker and Podman
+`run` commands, including their `container run` aliases, `parse` separates
+runtime options, the image, and the container command. Ordinary pre-image
+runtime options become `container_args`; explicit `KEY=value` environment
+options become `container_env`; representable bind mounts become `mounts`; and
+tokens after the image become `command` and `command_args`. If the first
+post-image token begins with `-`, `parse` leaves `command` unset and puts the
+whole post-image tail in `command_args` for the image's default entrypoint.
+
+Conversion is conservative. When an environment or mount form cannot be
+represented structurally—such as `--env HOME`, duplicate or file-sourced
+environment values, or a named or advanced mount—`parse` leaves every option in
+that group verbatim in `container_args`. When an option makes the image boundary
+ambiguous, such as an unknown option without an attached value, `parse` writes
+a warning to stderr and emits the entire invocation in the lossless raw `args`
+form. Non-`run` runtime commands and Apptainer invocations also remain raw.
+Other executables generate a normal `command` entry with `program` and `args`
+fields.
 
 ## managed instances
 
@@ -164,9 +188,10 @@ commands. A directory is scanned non-recursively for lowercase `*.yaml` and
 `*.yml` files in filename order.
 
 Each config runs independently with its own watches, worker pool, retry
-settings, and SQLite queue. Concurrent instances must use distinct database
-paths. Relative database, watch, working-directory, and structured bind-mount
-source paths are resolved from the directory containing that YAML file.
+settings, reusable values, and SQLite queue. Concurrent instances must use
+distinct database paths. Relative database, watch, working-directory, and
+structured bind-mount source paths are resolved from the directory containing
+that YAML file, including relative paths inserted through `values`.
 Relative program paths that contain a slash are resolved the same way; bare
 program names still use `PATH` lookup. Relative local structured Apptainer image
 names and paths are resolved from the config directory; absolute paths and paths
@@ -277,6 +302,9 @@ queue:
 database:
   path: ./slipway.db
 
+values:
+  shared_dir: /srv/slipway
+
 watches:
   - name: incoming
     path: ./incoming
@@ -298,9 +326,11 @@ watches:
           - "{{file}}"
           - "--job-id"
           - "{{job_id}}"
+          - "--shared-dir"
+          - "{{shared_dir}}"
         timeout: 15m
-        working_directory: "{{dir}}"
-        output: "{{stem}}.json"
+        working_directory: "{{shared_dir}}"
+        output: "{{shared_dir}}/{{stem}}.json"
         env:
           SLIPWAY_INPUT: "{{basename}}"
 ```
@@ -349,7 +379,9 @@ with `program`. A standalone `--` is rejected because it would stop the runtime
 from parsing the generated mount and environment options.
 
 `command` is the optional first post-image command token, and each
-`command_args` entry follows it. Apptainer uses `command` as the program for
+`command_args` entry follows it. When parsing Docker or Podman, a first token
+beginning with `-` instead starts `command_args`, leaving `command` unset; the
+resulting runtime argv is unchanged. Apptainer uses `command` as the program for
 `exec`; Docker and Podman apply the image's normal `ENTRYPOINT` and `CMD`
 semantics. slipway preserves the order of mounts, `container_args`, and
 `command_args`, and sorts `container_env` keys for deterministic output. After
@@ -392,8 +424,13 @@ In this form, slipway passes `args` to the runtime CLI unchanged, so they must
 include the runtime subcommand, image, and all runtime-specific options.
 Nonempty raw `args` cannot be combined with structured container fields.
 Structured container fields cannot be used with `executor: command`.
-`slipway parse -- docker ...` generates this form so it can preserve the
-original invocation without depending on a particular Docker option version.
+`slipway parse` generates this form as a safe fallback when a Docker or Podman
+`run` invocation cannot be represented structurally. Basic path-based
+`-v SOURCE:TARGET[:ro|rw]` bind mounts can be converted, but the generated
+runtime invocation uses `--mount`; unlike Docker's `-v`, this requires the host
+source to exist when the pipeline runs. A converted relative source is resolved
+relative to the YAML file after the fragment is pasted, rather than relative to
+the directory where `parse` was invoked.
 
 The pipeline `env` and `working_directory` settings configure the host-side
 runtime CLI process. Use `container_env` for explicit container variables and
@@ -409,6 +446,42 @@ depth. Patterns with a slash match the path relative to the watch root and may
 use `**` for zero or more directories. Excludes take precedence. With
 `reprocess_on_change: false`, a watch/path pair is processed once; when true, a
 new size/modification-time fingerprint creates another persistent job.
+
+Top-level `values` provide reusable, config-local strings for pipelines:
+
+```yaml
+values:
+  media_root: /srv/media
+  incoming_media: "{{media_root}}/incoming"
+  container_data: /data
+
+watches:
+  - name: media
+    path: ./incoming
+    pipeline:
+      - name: inspect
+        executor: docker
+        image: example/inspector:latest
+        mounts:
+          - source: "{{incoming_media}}"
+            target: "{{container_data}}"
+        command_args:
+          - "{{container_data}}/{{basename}}"
+```
+
+Value keys are case-sensitive and must start with a letter or underscore and
+otherwise contain only letters, digits, and underscores. Values may reference
+other declared values; reference cycles are rejected. The built-in names
+`file`, `dir`, `basename`, `stem`, `ext`, and `job_id` are reserved. Built-in
+templates inside a value remain available for per-job expansion, while an
+undeclared `{{name}}` remains unexpanded for compatibility with downstream
+templating tools. Normal field-specific path resolution still applies after
+that expansion. Values are expanded in the pipeline fields listed below,
+before semantic validation and config-relative path resolution.
+
+Values are ordinary configuration data, not secrets. Their expanded contents
+may appear in process arguments, environment values, logs, and persisted
+command history.
 
 The following templates are expanded independently in ordinary command
 arguments, structured container images, mount sources and targets, container

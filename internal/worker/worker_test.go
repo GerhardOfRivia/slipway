@@ -83,6 +83,87 @@ func TestProcessJobRunsCommandsSequentiallyAndPersistsHistory(t *testing.T) {
 	}
 }
 
+func TestProcessJobCombinesConfiguredValuesAndJobTemplates(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	filename := filepath.Join(directory, "slipway.yaml")
+	configuration := `
+values:
+  shared_dir: /srv/shared
+  container_dir: /data
+  mode: batch
+watches:
+  - name: incoming
+    path: .
+    pipeline:
+      - name: process
+        executor: docker
+        image: example/{{stem}}:latest
+        mounts:
+          - source: "{{shared_dir}}/{{basename}}"
+            target: "{{container_dir}}"
+            read_only: true
+        container_env:
+          INPUT: "{{shared_dir}}/{{basename}}"
+          MODE: "{{mode}}"
+        command: /app/process
+        command_args: ["{{container_dir}}/{{basename}}"]
+        working_directory: "{{shared_dir}}"
+        output: "{{shared_dir}}/{{stem}}.json"
+        env:
+          HOST_INPUT: "{{shared_dir}}/{{basename}}"
+`
+	if err := os.WriteFile(filename, []byte(configuration), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(filename)
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+
+	configured := cfg.Watches[0].Pipeline[0]
+	if got, want := configured.Mounts[0].Source, "/srv/shared/{{basename}}"; got != want {
+		t.Fatalf("configured mount source = %q, want %q", got, want)
+	}
+	store := &recordingStore{}
+	runner := &recordingExecutor{}
+	pool, err := New(store, NewConfigResolver(cfg.Watches), runner, Options{Workers: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	job := &queue.Job{ID: 42, RunID: 7, WatchName: "incoming", Path: "/inputs/report.csv"}
+	if err := pool.processJob(context.Background(), job); err != nil {
+		t.Fatalf("processJob() error = %v", err)
+	}
+
+	if len(runner.commands) != 1 {
+		t.Fatalf("executed commands = %d, want 1", len(runner.commands))
+	}
+	command := runner.commands[0]
+	wantArgs := []string{
+		"run",
+		"--mount", "type=bind,source=/srv/shared/report.csv,target=/data,ro",
+		"--env", "INPUT=/srv/shared/report.csv",
+		"--env", "MODE=batch",
+		"example/report:latest",
+		"/app/process",
+		"/data/report.csv",
+	}
+	if !reflect.DeepEqual(command.Args, wantArgs) {
+		t.Errorf("args = %#v, want %#v", command.Args, wantArgs)
+	}
+	if command.WorkingDir != "/srv/shared" || command.Output != "/srv/shared/report.json" {
+		t.Errorf("working directory/output = %q/%q", command.WorkingDir, command.Output)
+	}
+	if want := map[string]string{"HOST_INPUT": "/srv/shared/report.csv"}; !reflect.DeepEqual(command.Env, want) {
+		t.Errorf("env = %#v, want %#v", command.Env, want)
+	}
+	if got := cfg.Watches[0].Pipeline[0].Mounts[0].Source; got != "/srv/shared/{{basename}}" {
+		t.Errorf("worker mutated configured mount source to %q", got)
+	}
+}
+
 func TestProcessJobUsesConfiguredContainerExecutors(t *testing.T) {
 	t.Parallel()
 

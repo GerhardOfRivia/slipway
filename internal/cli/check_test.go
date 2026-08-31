@@ -58,6 +58,8 @@ func TestCheckDisplaysConfiguredPipelines(t *testing.T) {
 	configPath := filepath.Join(directory, "slipway.yaml")
 	databasePath := filepath.Join(directory, "never-created.db")
 	configuration := `
+values:
+  shared_dir: /srv/shared
 database:
   path: ./never-created.db
 watches:
@@ -66,7 +68,7 @@ watches:
     pipeline:
       - name: prepare
         program: convert
-        args: ["--input", "{{file}}", "literal; $(no shell)", "", "it's ready"]
+        args: ["--input", "{{file}}", "{{shared_dir}}/{{basename}}", "literal; $(no shell)", "", "it's ready"]
       - name: archive
         program: ./bin/archive
         args: ["{{file}}", "done file"]
@@ -90,7 +92,7 @@ watches:
 	}
 	want := fmt.Sprintf(`Config: %s
 Watch: incoming
-  1. prepare [command]: convert --input '{{file}}' 'literal; $(no shell)' '' 'it'"'"'s ready'
+  1. prepare [command]: convert --input '{{file}}' '/srv/shared/{{basename}}' 'literal; $(no shell)' '' 'it'"'"'s ready'
   2. archive [command]: %s '{{file}}' 'done file'
      output: "{{stem}}.archive.log"
 Watch: images
@@ -107,7 +109,7 @@ Watch: images
 	}
 	rawWant := fmt.Sprintf(`Config: %s
 Watch: incoming
-  1. prepare [command]: "convert" ["--input","{{file}}","literal; $(no shell)","","it's ready"]
+  1. prepare [command]: "convert" ["--input","{{file}}","/srv/shared/{{basename}}","literal; $(no shell)","","it's ready"]
   2. archive [command]: %q ["{{file}}","done file"]
      output: "{{stem}}.archive.log"
 Watch: images

@@ -16,10 +16,22 @@ type generatedPipeline struct {
 }
 
 type generatedPipelineStep struct {
-	Name     string              `yaml:"name"`
-	Executor config.ExecutorType `yaml:"executor"`
-	Program  string              `yaml:"program,omitempty"`
-	Args     []string            `yaml:"args,omitempty"`
+	Name          string              `yaml:"name"`
+	Executor      config.ExecutorType `yaml:"executor"`
+	Program       string              `yaml:"program,omitempty"`
+	Args          []string            `yaml:"args,omitempty"`
+	Image         string              `yaml:"image,omitempty"`
+	ContainerArgs []string            `yaml:"container_args,omitempty"`
+	Mounts        []generatedMount    `yaml:"mounts,omitempty"`
+	ContainerEnv  map[string]string   `yaml:"container_env,omitempty"`
+	Command       string              `yaml:"command,omitempty"`
+	CommandArgs   []string            `yaml:"command_args,omitempty"`
+}
+
+type generatedMount struct {
+	Source   string `yaml:"source"`
+	Target   string `yaml:"target"`
+	ReadOnly bool   `yaml:"read_only,omitempty"`
 }
 
 func parseCommand(args []string, stdout, stderr io.Writer) error {
@@ -60,6 +72,20 @@ func parseCommand(args []string, stdout, stderr io.Writer) error {
 	if executor == config.ExecutorCommand || program != string(executor) {
 		step.Program = program
 	}
+	if executor == config.ExecutorDocker || executor == config.ExecutorPodman {
+		structured, fallbackReason := parseStructuredContainerRun(executor, commandArgs)
+		if structured != nil {
+			step.Args = nil
+			step.Image = structured.image
+			step.ContainerArgs = structured.containerArgs
+			step.Mounts = structured.mounts
+			step.ContainerEnv = structured.containerEnv
+			step.Command = structured.command
+			step.CommandArgs = structured.commandArgs
+		} else if fallbackReason != "" {
+			fmt.Fprintf(stderr, "slipway parse: warning: %s; emitted raw runtime args\n", fallbackReason)
+		}
+	}
 
 	encoder := yaml.NewEncoder(stdout)
 	encoder.SetIndent(2)
@@ -90,8 +116,14 @@ func generatedStepName(program string, executor config.ExecutorType, args []stri
 	if name == "" {
 		name = "command"
 	}
-	if executor != config.ExecutorCommand && len(args) > 0 && (args[0] == "run" || args[0] == "exec") {
-		name += "-" + args[0]
+	if executor != config.ExecutorCommand && len(args) > 0 {
+		action := args[0]
+		if action == "container" && len(args) > 1 {
+			action = args[1]
+		}
+		if action == "run" || action == "exec" {
+			name += "-" + action
+		}
 	}
 	return name
 }
