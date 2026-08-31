@@ -107,10 +107,83 @@ type WatchConfig struct {
 }
 
 // MountConfig describes one bind mount for a structured container invocation.
+// Options are ordered, runtime-specific fields appended to --mount, including
+// access-mode fields such as ro and readonly.
 type MountConfig struct {
-	Source   string `yaml:"source"`
-	Target   string `yaml:"target"`
-	ReadOnly bool   `yaml:"read_only"`
+	Source  string   `yaml:"source"`
+	Target  string   `yaml:"target"`
+	Options []string `yaml:"options"`
+}
+
+// UnmarshalYAML keeps the released read_only field as an input-only
+// compatibility alias while normalizing the runtime representation to Options.
+// MountConfig validates its own keys because yaml.Node.Decode does not inherit
+// the parent decoder's KnownFields setting.
+func (mount *MountConfig) UnmarshalYAML(node *yaml.Node) error {
+	if err := validateMountMappingFields(node, make(map[*yaml.Node]bool)); err != nil {
+		return err
+	}
+
+	var decoded struct {
+		Source   string   `yaml:"source"`
+		Target   string   `yaml:"target"`
+		Options  []string `yaml:"options"`
+		ReadOnly *bool    `yaml:"read_only"`
+	}
+	if err := node.Decode(&decoded); err != nil {
+		return err
+	}
+	mount.Source = decoded.Source
+	mount.Target = decoded.Target
+	mount.Options = append([]string(nil), decoded.Options...)
+	if decoded.ReadOnly != nil && *decoded.ReadOnly {
+		mount.Options = append([]string{"ro"}, mount.Options...)
+	}
+	return nil
+}
+
+func validateMountMappingFields(node *yaml.Node, visited map[*yaml.Node]bool) error {
+	if node.Kind == yaml.AliasNode {
+		node = node.Alias
+	}
+	if node == nil || node.Kind != yaml.MappingNode {
+		return errors.New("mount must be a mapping")
+	}
+	if visited[node] {
+		return nil
+	}
+	visited[node] = true
+
+	for index := 0; index < len(node.Content); index += 2 {
+		key, value := node.Content[index], node.Content[index+1]
+		if key.Kind != yaml.ScalarNode {
+			return errors.New("mount field name must be a scalar")
+		}
+		if key.Tag == "!!merge" {
+			if err := validateMountMergeFields(value, visited); err != nil {
+				return err
+			}
+			continue
+		}
+		switch key.Value {
+		case "source", "target", "options", "read_only":
+		default:
+			return fmt.Errorf("line %d: field %s not found in type config.MountConfig", key.Line, key.Value)
+		}
+	}
+	return nil
+}
+
+func validateMountMergeFields(node *yaml.Node, visited map[*yaml.Node]bool) error {
+	if node.Kind == yaml.SequenceNode {
+		for _, item := range node.Content {
+			if err := validateMountMappingFields(item, visited); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return validateMountMappingFields(node, visited)
 }
 
 // CommandConfig describes one process invocation. Program and Args are kept
@@ -196,9 +269,7 @@ func formatApptainerEnvironment(environment string) string {
 
 func formatBindMount(mount MountConfig) string {
 	fields := []string{"type=bind", "source=" + mount.Source, "target=" + mount.Target}
-	if mount.ReadOnly {
-		fields = append(fields, "ro")
-	}
+	fields = append(fields, mount.Options...)
 	return formatCSVFields(fields)
 }
 
@@ -249,6 +320,21 @@ func (command CommandConfig) validateStructuredContainer() error {
 		if !containerTargetCanBeAbsolute(mount.Target) {
 			return fmt.Errorf("mounts[%d].target must be an absolute container path", index)
 		}
+		for optionIndex, option := range mount.Options {
+			if strings.TrimSpace(option) == "" {
+				return fmt.Errorf("mounts[%d].options[%d] must not be blank", index, optionIndex)
+			}
+			if strings.IndexByte(option, 0) >= 0 {
+				return fmt.Errorf("mounts[%d].options[%d] must not contain a NUL byte", index, optionIndex)
+			}
+			key, _, _ := strings.Cut(option, "=")
+			if strings.TrimSpace(key) == "" {
+				return fmt.Errorf("mounts[%d].options[%d] must have a non-blank key", index, optionIndex)
+			}
+			if reservedBindMountOptionKey(key) {
+				return fmt.Errorf("mounts[%d].options[%d] must not override reserved bind mount field %q", index, optionIndex, key)
+			}
+		}
 	}
 	for key := range command.ContainerEnv {
 		if key == "" || strings.ContainsRune(key, '=') || strings.IndexByte(key, 0) >= 0 {
@@ -261,6 +347,15 @@ func (command CommandConfig) validateStructuredContainer() error {
 		}
 	}
 	return nil
+}
+
+func reservedBindMountOptionKey(key string) bool {
+	switch key {
+	case "type", "source", "src", "target", "destination", "dest", "dst":
+		return true
+	default:
+		return false
+	}
 }
 
 func containerTargetCanBeAbsolute(target string) bool {

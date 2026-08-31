@@ -29,9 +29,9 @@ type generatedPipelineStep struct {
 }
 
 type generatedMount struct {
-	Source   string `yaml:"source"`
-	Target   string `yaml:"target"`
-	ReadOnly bool   `yaml:"read_only,omitempty"`
+	Source  string   `yaml:"source"`
+	Target  string   `yaml:"target"`
+	Options []string `yaml:"options,omitempty"`
 }
 
 func parseCommand(args []string, stdout, stderr io.Writer) error {

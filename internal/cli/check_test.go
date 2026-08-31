@@ -143,7 +143,7 @@ watches:
         mounts:
           - source: "{{dir}}"
             target: /data
-            read_only: true
+            options: [ro]
         container_env: {MODE: batch}
         command: inspect
         command_args: ["/data/{{basename}}"]

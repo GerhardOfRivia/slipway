@@ -18,6 +18,7 @@ values:
   image_tag: "1.2"
   container_root: /payload
   container_command: analyze
+  mount_label: shared
 watches:
   - name: incoming
     path: .
@@ -39,7 +40,9 @@ watches:
         mounts:
           - source: "{{shared_root}}/source"
             target: "{{container_root}}/input"
-            read_only: true
+            options:
+              - ro
+              - "relabel={{mount_label}}"
         container_env:
           SHARED_ROOT: "{{shared_root}}"
         command: "{{container_command}}"
@@ -81,9 +84,9 @@ watches:
 		t.Errorf("container args = %#v, want %#v", container.ContainerArgs, want)
 	}
 	wantMounts := []MountConfig{{
-		Source:   filepath.Join(sharedRoot, "source"),
-		Target:   "/payload/input",
-		ReadOnly: true,
+		Source:  filepath.Join(sharedRoot, "source"),
+		Target:  "/payload/input",
+		Options: []string{"ro", "relabel=shared"},
 	}}
 	if !reflect.DeepEqual(container.Mounts, wantMounts) {
 		t.Errorf("container mounts = %#v, want %#v", container.Mounts, wantMounts)

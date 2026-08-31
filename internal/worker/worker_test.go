@@ -93,6 +93,7 @@ values:
   shared_dir: /srv/shared
   container_dir: /data
   mode: batch
+  propagation: rslave
 watches:
   - name: incoming
     path: .
@@ -103,7 +104,10 @@ watches:
         mounts:
           - source: "{{shared_dir}}/{{basename}}"
             target: "{{container_dir}}"
-            read_only: true
+            options:
+              - ro
+              - "bind-propagation={{propagation}}"
+              - "x-job={{stem}}"
         container_env:
           INPUT: "{{shared_dir}}/{{basename}}"
           MODE: "{{mode}}"
@@ -126,6 +130,9 @@ watches:
 	if got, want := configured.Mounts[0].Source, "/srv/shared/{{basename}}"; got != want {
 		t.Fatalf("configured mount source = %q, want %q", got, want)
 	}
+	if got, want := configured.Mounts[0].Options, []string{"ro", "bind-propagation=rslave", "x-job={{stem}}"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("configured mount options = %#v, want %#v", got, want)
+	}
 	store := &recordingStore{}
 	runner := &recordingExecutor{}
 	pool, err := New(store, NewConfigResolver(cfg.Watches), runner, Options{Workers: 1})
@@ -143,7 +150,7 @@ watches:
 	command := runner.commands[0]
 	wantArgs := []string{
 		"run",
-		"--mount", "type=bind,source=/srv/shared/report.csv,target=/data,ro",
+		"--mount", "type=bind,source=/srv/shared/report.csv,target=/data,ro,bind-propagation=rslave,x-job=report",
 		"--env", "INPUT=/srv/shared/report.csv",
 		"--env", "MODE=batch",
 		"example/report:latest",
@@ -161,6 +168,9 @@ watches:
 	}
 	if got := cfg.Watches[0].Pipeline[0].Mounts[0].Source; got != "/srv/shared/{{basename}}" {
 		t.Errorf("worker mutated configured mount source to %q", got)
+	}
+	if got, want := cfg.Watches[0].Pipeline[0].Mounts[0].Options, []string{"ro", "bind-propagation=rslave", "x-job={{stem}}"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("worker mutated configured mount options to %#v", got)
 	}
 }
 
@@ -181,7 +191,7 @@ watches:
         mounts:
           - source: "{{dir}}"
             target: /{{stem}}
-            read_only: true
+            options: [ro]
         container_env:
           INPUT: "{{basename}}"
         env:
@@ -199,7 +209,7 @@ watches:
         mounts:
           - source: "{{dir}}"
             target: /data
-            read_only: true
+            options: [ro]
         container_env:
           SOURCE: '"{{basename}}"'
         env:
@@ -305,6 +315,13 @@ func TestProcessJobRejectsInvalidExpandedStructuredValues(t *testing.T) {
 			jobPath:   "/input/--.csv",
 			wantError: "container_args[0] must not be --",
 		},
+		{
+			name: "expanded bind mount option overrides structured field",
+			commandYAML: `        image: example/image
+        mounts: [{source: /host, target: /data, options: ["{{stem}}=/other"]}]`,
+			jobPath:   "/input/source.csv",
+			wantError: `mounts[0].options[0] must not override reserved bind mount field "source"`,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -352,10 +369,14 @@ func TestConfigResolverClonesStructuredContainerConfig(t *testing.T) {
 	configured := []config.WatchConfig{{
 		Name: "incoming",
 		Pipeline: []config.CommandConfig{{
-			Name:          "container",
-			Executor:      config.ExecutorDocker,
-			Image:         "example/image",
-			Mounts:        []config.MountConfig{{Source: "/source", Target: "/target"}},
+			Name:     "container",
+			Executor: config.ExecutorDocker,
+			Image:    "example/image",
+			Mounts: []config.MountConfig{{
+				Source:  "/source",
+				Target:  "/target",
+				Options: []string{"bind-propagation=rslave"},
+			}},
 			ContainerEnv:  map[string]string{"MODE": "batch"},
 			ContainerArgs: []string{"--rm"},
 			CommandArgs:   []string{"input.csv"},
@@ -365,6 +386,7 @@ func TestConfigResolverClonesStructuredContainerConfig(t *testing.T) {
 	resolver := NewConfigResolver(configured)
 
 	configured[0].Pipeline[0].Mounts[0].Source = "/mutated-input"
+	configured[0].Pipeline[0].Mounts[0].Options[0] = "mutated-input"
 	configured[0].Pipeline[0].ContainerEnv["MODE"] = "mutated-input"
 	configured[0].Pipeline[0].ContainerArgs[0] = "--mutated-input"
 	configured[0].Pipeline[0].CommandArgs[0] = "mutated-input.csv"
@@ -374,13 +396,15 @@ func TestConfigResolverClonesStructuredContainerConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first[0].Mounts[0].Source != "/source" || first[0].ContainerEnv["MODE"] != "batch" ||
+	if first[0].Mounts[0].Source != "/source" || first[0].Mounts[0].Options[0] != "bind-propagation=rslave" ||
+		first[0].ContainerEnv["MODE"] != "batch" ||
 		first[0].ContainerArgs[0] != "--rm" || first[0].CommandArgs[0] != "input.csv" ||
 		first[0].Env["HOST_MODE"] != "local" {
 		t.Fatalf("resolver retained mutable input aliases: %#v", first[0])
 	}
 
 	first[0].Mounts[0].Source = "/mutated-result"
+	first[0].Mounts[0].Options[0] = "mutated-result"
 	first[0].ContainerEnv["MODE"] = "mutated-result"
 	first[0].ContainerArgs[0] = "--mutated-result"
 	first[0].CommandArgs[0] = "mutated-result.csv"
@@ -389,7 +413,8 @@ func TestConfigResolverClonesStructuredContainerConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if second[0].Mounts[0].Source != "/source" || second[0].ContainerEnv["MODE"] != "batch" ||
+	if second[0].Mounts[0].Source != "/source" || second[0].Mounts[0].Options[0] != "bind-propagation=rslave" ||
+		second[0].ContainerEnv["MODE"] != "batch" ||
 		second[0].ContainerArgs[0] != "--rm" || second[0].CommandArgs[0] != "input.csv" ||
 		second[0].Env["HOST_MODE"] != "local" {
 		t.Fatalf("Resolve() returned mutable aliases: %#v", second[0])

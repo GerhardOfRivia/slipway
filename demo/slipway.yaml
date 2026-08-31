@@ -27,7 +27,8 @@ watches:
         mounts:
           - source: "{{dir}}"
             target: /data
-            read_only: true
+            options:
+              - ro
         command_args:
           - "--json"
           - "--country"

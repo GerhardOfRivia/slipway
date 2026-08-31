@@ -25,6 +25,9 @@ func TestParseDockerRunUsesStructuredFields(t *testing.T) {
 	if code != 0 || stderr != "" {
 		t.Fatalf("Run(%v) = code %d, stderr %q", invocation, code, stderr)
 	}
+	if strings.Contains(stdout, "read_only:") || !strings.Contains(stdout, "- readonly") {
+		t.Fatalf("generated mount access mode was not emitted through options:\n%s", stdout)
+	}
 	fragment := decodeGeneratedPipeline(t, stdout)
 	if len(fragment.Pipeline) != 1 {
 		t.Fatalf("pipeline = %+v", fragment.Pipeline)
@@ -43,8 +46,8 @@ func TestParseDockerRunUsesStructuredFields(t *testing.T) {
 		t.Errorf("container_args = %#v, want %#v", step.ContainerArgs, want)
 	}
 	wantMounts := []config.MountConfig{
-		{Source: "{{dir}}/input files", Target: "/input", ReadOnly: true},
-		{Source: "/scratch/output files", Target: "/output", ReadOnly: true},
+		{Source: "{{dir}}/input files", Target: "/input", Options: []string{"readonly"}},
+		{Source: "/scratch/output files", Target: "/output", Options: []string{"ro"}},
 	}
 	if !reflect.DeepEqual(step.Mounts, wantMounts) {
 		t.Errorf("mounts = %#v, want %#v", step.Mounts, wantMounts)
@@ -57,7 +60,7 @@ func TestParseDockerRunUsesStructuredFields(t *testing.T) {
 	}
 	wantExecutionArgs := []string{
 		"run", "--rm", "--gpus", "all",
-		"--mount", "type=bind,source={{dir}}/input files,target=/input,ro",
+		"--mount", "type=bind,source={{dir}}/input files,target=/input,readonly",
 		"--mount", "type=bind,source=/scratch/output files,target=/output,ro",
 		"--env", "INPUT={{basename}}", "--env", "MODE=batch mode",
 		"nvidia/cuda:12.8.1-base-ubuntu24.04", "nvidia-smi", "--query-gpu=name", "",
@@ -90,7 +93,7 @@ func TestParseDockerRunTreatsLeadingOptionAsDefaultCommandArgs(t *testing.T) {
 	if !reflect.DeepEqual(step.CommandArgs, wantCommandArgs) {
 		t.Errorf("command_args = %#v, want %#v", step.CommandArgs, wantCommandArgs)
 	}
-	if want := []config.MountConfig{{Source: "{{dir}}", Target: "/data", ReadOnly: true}}; !reflect.DeepEqual(step.Mounts, want) {
+	if want := []config.MountConfig{{Source: "{{dir}}", Target: "/data", Options: []string{"ro"}}}; !reflect.DeepEqual(step.Mounts, want) {
 		t.Errorf("mounts = %#v, want %#v", step.Mounts, want)
 	}
 	loaded := loadGeneratedPipeline(t, stdout)
@@ -120,7 +123,7 @@ func TestParsePodmanRunUsesStructuredFieldsAndProgramOverride(t *testing.T) {
 	if want := []string{"-it", "--replace", "--userns=keep-id", "--systemd", "always"}; !reflect.DeepEqual(step.ContainerArgs, want) {
 		t.Errorf("container_args = %#v, want %#v", step.ContainerArgs, want)
 	}
-	if want := []config.MountConfig{{Source: "{{dir}}", Target: "/data", ReadOnly: true}}; !reflect.DeepEqual(step.Mounts, want) {
+	if want := []config.MountConfig{{Source: "{{dir}}", Target: "/data", Options: []string{"ro"}}}; !reflect.DeepEqual(step.Mounts, want) {
 		t.Errorf("mounts = %#v, want %#v", step.Mounts, want)
 	}
 	if want := map[string]string{"MODE": "test"}; !reflect.DeepEqual(step.ContainerEnv, want) {
@@ -255,18 +258,38 @@ func TestParseContainerRunKeepsUnrepresentableOptionGroups(t *testing.T) {
 			wantEnv:       map[string]string{"MODE": "batch"},
 		},
 		{
-			name:    "one advanced mount keeps all mounts in place",
+			name:    "advanced long bind options are extracted",
 			program: "podman",
 			args: []string{"run", "--mount", "type=bind,source=/first,target=/first",
 				"--mount", "type=bind,source=/second,target=/second,relabel=shared", "image"},
-			wantContainer: []string{"--mount", "type=bind,source=/first,target=/first",
-				"--mount", "type=bind,source=/second,target=/second,relabel=shared"},
+			wantMounts: []config.MountConfig{
+				{Source: "/first", Target: "/first"},
+				{Source: "/second", Target: "/second", Options: []string{"relabel=shared"}},
+			},
 		},
 		{
 			name:          "bind and tmpfs stay ordered",
 			program:       "docker",
 			args:          []string{"run", "--mount", "type=bind,source=/host,target=/data", "--tmpfs", "/tmp", "image"},
 			wantContainer: []string{"--mount", "type=bind,source=/host,target=/data", "--tmpfs", "/tmp"},
+		},
+		{
+			name:    "advanced volume mode keeps all mounts in place",
+			program: "docker",
+			args: []string{"run", "--mount", "type=bind,source=/first,target=/first",
+				"-v", "/second:/second:ro,rshared", "image"},
+			wantContainer: []string{"--mount", "type=bind,source=/first,target=/first",
+				"-v", "/second:/second:ro,rshared"},
+		},
+		{
+			name:    "duplicate access modes remain ordered mount options",
+			program: "podman",
+			args: []string{"run", "--mount", "type=bind,source=/first,target=/first",
+				"--mount", "type=bind,source=/second,target=/second,ro,rw", "image"},
+			wantMounts: []config.MountConfig{
+				{Source: "/first", Target: "/first"},
+				{Source: "/second", Target: "/second", Options: []string{"ro", "rw"}},
+			},
 		},
 		{
 			name:          "unknown inline option disables field extraction",
@@ -314,8 +337,8 @@ func TestParseContainerRunKeepsUnrepresentableOptionGroups(t *testing.T) {
 func TestParseContainerRunExtractsMountAndEnvironmentForms(t *testing.T) {
 	t.Parallel()
 	invocation := []string{
-		"parse", "--", "docker", "run",
-		`--mount=type=bind,"source=/host/a,b ",destination=/data,readonly=false`,
+		"parse", "--", "podman", "run",
+		`--mount=type=bind,"source=/host/a,b ",dest=/data,readwrite=false,bind-propagation=rshared,"custom=a,b"`,
 		"--volume={{dir}}:/input:rw", "-e=EMPTY=", "--env=COMPLEX=a=b",
 		"example/image",
 	}
@@ -325,7 +348,7 @@ func TestParseContainerRunExtractsMountAndEnvironmentForms(t *testing.T) {
 	}
 	step := decodeGeneratedPipeline(t, stdout).Pipeline[0]
 	wantMounts := []config.MountConfig{
-		{Source: "/host/a,b ", Target: "/data"},
+		{Source: "/host/a,b ", Target: "/data", Options: []string{"readwrite=false", "bind-propagation=rshared", "custom=a,b"}},
 		{Source: "{{dir}}", Target: "/input"},
 	}
 	if !reflect.DeepEqual(step.Mounts, wantMounts) {

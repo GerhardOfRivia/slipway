@@ -107,7 +107,8 @@ pipeline:
     mounts:
       - source: '{{dir}}'
         target: /input
-        read_only: true
+        options:
+          - readonly
     container_env:
       INPUT: '{{basename}}'
     command: nvidia-smi
@@ -127,11 +128,12 @@ whole post-image tail in `command_args` for the image's default entrypoint.
 
 Conversion is conservative. When an environment or mount form cannot be
 represented structurally—such as `--env HOME`, duplicate or file-sourced
-environment values, or a named or advanced mount—`parse` leaves every option in
-that group verbatim in `container_args`. When an option makes the image boundary
-ambiguous, such as an unknown option without an attached value, `parse` writes
-a warning to stderr and emits the entire invocation in the lossless raw `args`
-form. Non-`run` runtime commands and Apptainer invocations also remain raw.
+environment values, a named volume, or an advanced short-form `-v` mount—
+`parse` leaves every option in that group verbatim in `container_args`. When an
+option makes the image boundary ambiguous, such as an unknown option without an
+attached value, `parse` writes a warning to stderr and emits the entire
+invocation in the lossless raw `args` form. Non-`run` runtime commands and
+Apptainer invocations also remain raw.
 Other executables generate a normal `command` entry with `program` and `args`
 fields.
 
@@ -359,7 +361,9 @@ Container entries can describe the invocation with structured fields:
         mounts:
           - source: "{{dir}}"
             target: /input
-            read_only: true
+            options:
+              - ro
+              - bind-propagation=rslave
         container_env:
           SLIPWAY_INPUT: "{{basename}}"
         command: /app/process-file
@@ -369,29 +373,43 @@ Container entries can describe the invocation with structured fields:
 ```
 
 `image` is required in structured mode. Every mount requires a host `source`
-and a container `target` that is absolute after template expansion; `read_only`
-defaults to false. `container_env` sets variables inside the container, but its
-values are materialized in the runtime argv and command history and should not
-be treated as a secret store. `container_args` holds additional `run` or `exec`
-action options, without the action itself. Runtime-global options that must
-precede the action require the raw container `args` form or a wrapper selected
-with `program`. A standalone `--` is rejected because it would stop the runtime
-from parsing the generated mount and environment options.
+and a container `target` that is absolute after template expansion. A mount's
+optional `options` list supplies ordered `--mount` fields such as `ro`,
+`readonly`, `bind-propagation=rslave`, `relabel=shared`, or
+`bind-recursive=disabled`. Each list item is one complete field, including any
+`=value` portion. These options are runtime-specific and are passed through
+without a name or value allowlist, so the selected Docker, Podman, or Apptainer
+version validates them. Within `options`, slipway does not normalize,
+deduplicate, or resolve contradictory access modes; listed order is preserved.
+`type` and source or target aliases cannot be repeated in `options`; use the
+structured fields for those values. Both config-local and per-job templates are
+expanded in mount options. Existing configurations may still use
+`read_only: true`; it is accepted as an input-only compatibility alias and
+normalized to a leading `ro` option.
+
+`container_env` sets variables inside the container, but its values are
+materialized in the runtime argv and command history and should not be treated
+as a secret store. `container_args` holds additional `run` or `exec` action
+options, without the action itself. Runtime-global options that must precede
+the action require the raw container `args` form or a wrapper selected with
+`program`. A standalone `--` is rejected because it would stop the runtime from
+parsing the generated mount and environment options.
 
 `command` is the optional first post-image command token, and each
 `command_args` entry follows it. When parsing Docker or Podman, a first token
 beginning with `-` instead starts `command_args`, leaving `command` unset; the
 resulting runtime argv is unchanged. Apptainer uses `command` as the program for
 `exec`; Docker and Podman apply the image's normal `ENTRYPOINT` and `CMD`
-semantics. slipway preserves the order of mounts, `container_args`, and
-`command_args`, and sorts `container_env` keys for deterministic output. After
-template expansion, each mount becomes two argv entries: `--mount` followed by
-a CSV-encoded `type=bind,source=...,target=...[,ro]` value. CSV encoding keeps
-commas and quotes in expanded mount sources and targets from becoming separate
-fields in the runtime's mount parser. Each `container_env` entry similarly
-becomes `--env` plus one argument representing `KEY=value`; for Apptainer that
-argument is encoded for its CSV-based parser so delimiters cannot create extra
-environment entries.
+semantics. slipway preserves the order of mounts, mount options,
+`container_args`, and `command_args`, and sorts `container_env` keys for
+deterministic output. After template expansion, each mount becomes two argv
+entries: `--mount` followed by a CSV-encoded
+`type=bind,source=...,target=...[,<option>...]` value. CSV encoding keeps
+commas and quotes in expanded mount sources, targets, and option values from
+becoming separate fields in the runtime's mount parser. Each `container_env`
+entry similarly becomes `--env` plus one argument representing `KEY=value`;
+for Apptainer that argument is encoded for its CSV-based parser so delimiters
+cannot create extra environment entries.
 
 For Docker and Podman, structured fields produce arguments in this order:
 
@@ -425,9 +443,12 @@ include the runtime subcommand, image, and all runtime-specific options.
 Nonempty raw `args` cannot be combined with structured container fields.
 Structured container fields cannot be used with `executor: command`.
 `slipway parse` generates this form as a safe fallback when a Docker or Podman
-`run` invocation cannot be represented structurally. Basic path-based
-`-v SOURCE:TARGET[:ro|rw]` bind mounts can be converted, but the generated
-runtime invocation uses `--mount`; unlike Docker's `-v`, this requires the host
+`run` invocation cannot be represented structurally. Long-form bind mounts can
+retain additional fields in `options`. Basic path-based
+`-v SOURCE:TARGET[:ro|rw]` bind mounts can also be converted, but advanced
+short-form modes remain in raw `container_args` because their long-form
+equivalents differ between runtimes. The generated invocation for a converted
+basic `-v` mount uses `--mount`; unlike Docker's `-v`, this requires the host
 source to exist when the pipeline runs. A converted relative source is resolved
 relative to the YAML file after the fragment is pasted, rather than relative to
 the directory where `parse` was invoked.
@@ -484,9 +505,9 @@ may appear in process arguments, environment values, logs, and persisted
 command history.
 
 The following templates are expanded independently in ordinary command
-arguments, structured container images, mount sources and targets, container
-arguments, container commands and command arguments, working directories,
-output paths, and host or container environment values:
+arguments, structured container images, mount sources, targets, and options,
+container arguments, container commands and command arguments, working
+directories, output paths, and host or container environment values:
 
 | Template | Value |
 | --- | --- |
@@ -513,10 +534,10 @@ process group, but a container managed by a separate runtime daemon may outlive
 that CLI. `run --rm` removes the container after it eventually exits; it does
 not stop a live container whose CLI was killed. When cancellation must extend
 to the container, use a runtime-aware wrapper or container-side deadline that
-reliably stops it. Bind-mount sources must already exist and be accessible to
-the selected runtime. In particular, a remote daemon or VM-backed runtime may
-not see paths from the daemon host; slipway does not create or transfer mount
-sources.
+reliably stops it. Bind-mount sources must be accessible to the selected
+runtime. slipway does not create or transfer mount sources itself, though a
+runtime-specific option may ask the runtime to create one. In particular, a
+remote daemon or VM-backed runtime may not see paths from the daemon host.
 
 The optional `output` setting saves the command's complete stdout stream to a
 file while retaining the usual captured stdout for `slipway logs`; stderr remains

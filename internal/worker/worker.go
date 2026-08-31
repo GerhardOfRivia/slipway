@@ -72,7 +72,7 @@ func clonePipeline(pipeline []config.CommandConfig) []config.CommandConfig {
 	for i, command := range pipeline {
 		cloned[i] = command
 		cloned[i].Args = append([]string(nil), command.Args...)
-		cloned[i].Mounts = append([]config.MountConfig(nil), command.Mounts...)
+		cloned[i].Mounts = cloneMounts(command.Mounts)
 		cloned[i].ContainerArgs = append([]string(nil), command.ContainerArgs...)
 		cloned[i].CommandArgs = append([]string(nil), command.CommandArgs...)
 		if command.ContainerEnv != nil {
@@ -87,6 +87,18 @@ func clonePipeline(pipeline []config.CommandConfig) []config.CommandConfig {
 				cloned[i].Env[key] = value
 			}
 		}
+	}
+	return cloned
+}
+
+func cloneMounts(mounts []config.MountConfig) []config.MountConfig {
+	if mounts == nil {
+		return nil
+	}
+	cloned := make([]config.MountConfig, len(mounts))
+	for index, mount := range mounts {
+		cloned[index] = mount
+		cloned[index].Options = append([]string(nil), mount.Options...)
 	}
 	return cloned
 }
@@ -397,10 +409,11 @@ func expandConfiguredCommand(command config.CommandConfig, expander executor.Exp
 	command.WorkingDir = expander.String(command.WorkingDir)
 	command.Output = expander.String(command.Output)
 
-	command.Mounts = append([]config.MountConfig(nil), command.Mounts...)
+	command.Mounts = cloneMounts(command.Mounts)
 	for index := range command.Mounts {
 		command.Mounts[index].Source = expander.String(command.Mounts[index].Source)
 		command.Mounts[index].Target = expander.String(command.Mounts[index].Target)
+		command.Mounts[index].Options = expandConfiguredStrings(command.Mounts[index].Options, expander)
 	}
 	command.ContainerEnv = expandConfiguredEnvironment(command.ContainerEnv, expander)
 	command.Env = expandConfiguredEnvironment(command.Env, expander)

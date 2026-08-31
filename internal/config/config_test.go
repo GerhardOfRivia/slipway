@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
 	"strings"
@@ -220,7 +221,10 @@ watches:
         mounts:
           - source: ./inputs/{{stem}}
             target: /data
-            read_only: true
+            options:
+              - ro
+              - bind-propagation=rslave
+              - consistency=cached
           - source: "{{dir}}"
             target: "{{dir}}/source"
         container_env:
@@ -242,7 +246,7 @@ watches:
 	wantArgs := []string{
 		"run",
 		"--rm", "--network=none",
-		"--mount", "type=bind,source=" + resolvedMount + ",target=/data,ro",
+		"--mount", "type=bind,source=" + resolvedMount + ",target=/data,ro,bind-propagation=rslave,consistency=cached",
 		"--mount", "type=bind,source={{dir}},target={{dir}}/source",
 		"--env", "INPUT_NAME={{basename}}",
 		"--env", "Z_MODE=batch",
@@ -267,13 +271,17 @@ func TestContainerExecutionArgs(t *testing.T) {
 				Executor:      ExecutorPodman,
 				Image:         "example/image:latest",
 				ContainerArgs: []string{"--rm"},
-				Mounts:        []MountConfig{{Source: "/host", Target: "/data", ReadOnly: true}},
-				ContainerEnv:  map[string]string{"MODE": "batch"},
-				CommandArgs:   []string{"--input", "/data/file.csv"},
+				Mounts: []MountConfig{{
+					Source:  "/host",
+					Target:  "/data",
+					Options: []string{"relabel=shared", "ro", "bind-propagation=rslave", `custom=a,b"quoted"`},
+				}},
+				ContainerEnv: map[string]string{"MODE": "batch"},
+				CommandArgs:  []string{"--input", "/data/file.csv"},
 			},
 			want: []string{
 				"run", "--rm",
-				"--mount", "type=bind,source=/host,target=/data,ro",
+				"--mount", `type=bind,source=/host,target=/data,relabel=shared,ro,bind-propagation=rslave,"custom=a,b""quoted"""`,
 				"--env", "MODE=batch",
 				"example/image:latest", "--input", "/data/file.csv",
 			},
@@ -292,7 +300,7 @@ func TestContainerExecutionArgs(t *testing.T) {
 				Executor:      ExecutorApptainer,
 				Image:         "example.sif",
 				ContainerArgs: []string{"--containall"},
-				Mounts:        []MountConfig{{Source: "/host", Target: "/data", ReadOnly: true}},
+				Mounts:        []MountConfig{{Source: "/host", Target: "/data", Options: []string{"ro"}}},
 				ContainerEnv: map[string]string{
 					"LIST": `a=b,c"quoted"`,
 					"MODE": "batch",
@@ -325,6 +333,54 @@ func TestContainerExecutionArgs(t *testing.T) {
 				t.Fatalf("ExecutionArgs() = %#v, want %#v", got, test.want)
 			}
 		})
+	}
+}
+
+func TestLoadNormalizesLegacyReadOnlyMountOption(t *testing.T) {
+	filename := writeConfig(t, `
+watches:
+  - name: incoming
+    path: .
+    pipeline:
+      - name: run
+        executor: docker
+        image: example/image
+        mounts:
+          - &legacy_read_only
+            source: /first
+            target: /first
+            read_only: true
+            options: [relabel=shared]
+          - source: /second
+            target: /second
+            read_only: false
+          - <<: *legacy_read_only
+            source: /third
+            target: /third
+`)
+
+	cfg, err := Load(filename)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	command := cfg.Watches[0].Pipeline[0]
+	wantMounts := []MountConfig{
+		{Source: "/first", Target: "/first", Options: []string{"ro", "relabel=shared"}},
+		{Source: "/second", Target: "/second"},
+		{Source: "/third", Target: "/third", Options: []string{"ro", "relabel=shared"}},
+	}
+	if !reflect.DeepEqual(command.Mounts, wantMounts) {
+		t.Fatalf("mounts = %#v, want %#v", command.Mounts, wantMounts)
+	}
+	wantArgs := []string{
+		"run",
+		"--mount", "type=bind,source=/first,target=/first,ro,relabel=shared",
+		"--mount", "type=bind,source=/second,target=/second",
+		"--mount", "type=bind,source=/third,target=/third,ro,relabel=shared",
+		"example/image",
+	}
+	if got := command.ExecutionArgs(); !reflect.DeepEqual(got, wantArgs) {
+		t.Fatalf("ExecutionArgs() = %#v, want %#v", got, wantArgs)
 	}
 }
 
@@ -426,6 +482,44 @@ watches:
 		if err == nil || !strings.Contains(err.Error(), "executor must be a non-empty scalar string") {
 			t.Errorf("Load() error = %v, want malformed-executor error for %q", err, executorYAML)
 		}
+	}
+}
+
+func TestContainerMountOptionsRejectStructuralFields(t *testing.T) {
+	reserved := []string{
+		"type=bind",
+		"source=/other", "src=/other",
+		"target=/other", "destination=/other", "dest=/other", "dst=/other",
+	}
+	for _, option := range reserved {
+		t.Run(option, func(t *testing.T) {
+			command := CommandConfig{
+				Executor: ExecutorDocker,
+				Image:    "example/image",
+				Mounts: []MountConfig{{
+					Source:  "/host",
+					Target:  "/data",
+					Options: []string{option},
+				}},
+			}
+			err := command.ValidateExecution()
+			if err == nil || !strings.Contains(err.Error(), "must not override reserved bind mount field") {
+				t.Fatalf("ValidateExecution() error = %v", err)
+			}
+		})
+	}
+
+	command := CommandConfig{
+		Executor: ExecutorDocker,
+		Image:    "example/image",
+		Mounts: []MountConfig{{
+			Source:  "/host",
+			Target:  "/data",
+			Options: []string{"relabel=shared\x00private"},
+		}},
+	}
+	if err := command.ValidateExecution(); err == nil || !strings.Contains(err.Error(), "must not contain a NUL byte") {
+		t.Fatalf("ValidateExecution() NUL error = %v", err)
 	}
 }
 
@@ -660,6 +754,48 @@ watches:
         container_args: ["--rm", "--"]
 `,
 			wantErr: ".container_args[1] must not be --",
+		},
+		{
+			name: "blank bind mount option",
+			yaml: `
+watches:
+  - name: incoming
+    path: .
+    pipeline:
+      - name: run
+        executor: docker
+        image: example/image
+        mounts: [{source: /host, target: /data, options: [""]}]
+`,
+			wantErr: ".mounts[0].options[0] must not be blank",
+		},
+		{
+			name: "bind mount option without key",
+			yaml: `
+watches:
+  - name: incoming
+    path: .
+    pipeline:
+      - name: run
+        executor: docker
+        image: example/image
+        mounts: [{source: /host, target: /data, options: ["=value"]}]
+`,
+			wantErr: ".mounts[0].options[0] must have a non-blank key",
+		},
+		{
+			name: "bind mount option overrides structured field",
+			yaml: `
+watches:
+  - name: incoming
+    path: .
+    pipeline:
+      - name: run
+        executor: podman
+        image: example/image
+        mounts: [{source: /host, target: /data, options: [source=/other]}]
+`,
+			wantErr: `.mounts[0].options[0] must not override reserved bind mount field "source"`,
 		},
 		{
 			name: "unknown mount field",

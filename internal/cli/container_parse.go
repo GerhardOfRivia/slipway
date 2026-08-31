@@ -4,7 +4,6 @@ import (
 	"encoding/csv"
 	"fmt"
 	"path"
-	"strconv"
 	"strings"
 
 	"github.com/GerhardOfRivia/slipway/internal/config"
@@ -343,7 +342,7 @@ func parseLongBindMount(specification string) (generatedMount, bool) {
 	}
 
 	var mount generatedMount
-	var hasType, hasSource, hasTarget, hasReadOnly bool
+	var hasType, hasSource, hasTarget bool
 	for _, rawField := range records[0] {
 		key, value, hasValue := strings.Cut(rawField, "=")
 		switch key {
@@ -358,41 +357,23 @@ func parseLongBindMount(specification string) (generatedMount, bool) {
 			}
 			mount.Source = value
 			hasSource = true
-		case "target", "destination", "dst":
+		case "target", "destination", "dest", "dst":
 			if hasTarget || !hasValue || !containerMountTargetCanBeAbsolute(value) {
 				return generatedMount{}, false
 			}
 			mount.Target = value
 			hasTarget = true
-		case "ro", "readonly":
-			if hasReadOnly {
-				return generatedMount{}, false
-			}
-			readOnly, ok := parseMountBoolean(value, hasValue, true)
-			if !ok {
-				return generatedMount{}, false
-			}
-			mount.ReadOnly = readOnly
-			hasReadOnly = true
 		default:
-			return generatedMount{}, false
+			if strings.TrimSpace(rawField) == "" || strings.TrimSpace(key) == "" || strings.IndexByte(rawField, 0) >= 0 {
+				return generatedMount{}, false
+			}
+			mount.Options = append(mount.Options, rawField)
 		}
 	}
 	if !hasType || !hasSource || !hasTarget {
 		return generatedMount{}, false
 	}
 	return mount, true
-}
-
-func parseMountBoolean(value string, hasValue, implicit bool) (bool, bool) {
-	if !hasValue {
-		return implicit, true
-	}
-	parsed, err := strconv.ParseBool(value)
-	if err != nil {
-		return false, false
-	}
-	return parsed, true
 }
 
 func parseVolumeBindMount(specification string) (generatedMount, bool) {
@@ -410,7 +391,7 @@ func parseVolumeBindMount(specification string) (generatedMount, bool) {
 		return mount, true
 	}
 	if parts[2] == "ro" {
-		mount.ReadOnly = true
+		mount.Options = []string{"ro"}
 		return mount, true
 	}
 	if parts[2] == "rw" {

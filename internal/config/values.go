@@ -43,6 +43,7 @@ func (c *Config) expandValues() error {
 				mount := &command.Mounts[mountIndex]
 				mount.Source = replacer.Replace(mount.Source)
 				mount.Target = replacer.Replace(mount.Target)
+				mount.Options = replaceTemplateValueStrings(mount.Options, replacer)
 			}
 			command.ContainerEnv = replaceTemplateValueMap(command.ContainerEnv, replacer)
 			command.Env = replaceTemplateValueMap(command.Env, replacer)
