@@ -62,7 +62,7 @@ daemonless while the same queue database is active in `slipwayd` or another
 
 ## checking configuration
 
-Parse and validate configuration before running it locally or starting a managed
+Load and validate configuration before running it locally or starting a managed
 instance, and show every watch's sequential command pipeline:
 
 ```bash
@@ -81,6 +81,35 @@ directly, without a shell. `check --raw` selects the previous, authoritative
 representation consisting of a quoted program followed by its JSON argument
 array. Pipeline steps run in numbered order and are not shell pipes. Commands
 with an output file also show their configured output path.
+
+## generating pipeline configuration
+
+`parse` turns an already shell-tokenized command into a pipeline YAML fragment
+without executing it. Use `--` to separate slipway's options from the command:
+
+```bash
+slipway parse -- docker run --rm --gpus all nvidia/cuda:12.8.1-base-ubuntu24.04 nvidia-smi
+```
+
+```yaml
+pipeline:
+  - name: docker-run
+    executor: docker
+    args:
+      - run
+      - --rm
+      - --gpus
+      - all
+      - nvidia/cuda:12.8.1-base-ubuntu24.04
+    command: nvidia-smi
+```
+
+Paste the fragment under a watch, adjusting its indentation to match that
+watch. `--name` overrides the generated step name. Docker, Podman, and
+Apptainer invocations use the lossless raw `args` form, so every argument is
+preserved exactly and slipway does not guess where runtime options, the image,
+or the container command begin. Other executables generate a normal `command`
+entry with `program` and `args` fields.
 
 ## managed instances
 
@@ -156,8 +185,9 @@ names that differ only by case or Unicode normalization.
 
 ## optional web dashboard
 
-`slipwayd` can serve an embedded local dashboard without a second service. The
-web listener is disabled by default and accepts loopback addresses only:
+`slipwayd` can serve an embedded dashboard without a second service. The web
+listener is disabled by default, and a loopback address is the recommended
+setting:
 
 ```bash
 slipwayd --config ~/.local/slipway.d --web-listen 127.0.0.1:8080
@@ -183,9 +213,14 @@ API never accepts arbitrary config or database paths.
 
 Every API request requires the bearer token. Keep the token private because it
 authorizes dashboard reads and start/stop actions as the daemon user. The
-listener cannot bind to wildcard or non-loopback addresses. For access from
-another machine, keep it on loopback and use an SSH tunnel instead of exposing
-the port directly.
+listener also accepts an explicit wildcard address such as `0.0.0.0:8080` (or
+`[::]:8080`) and logs a warning when one is used. Connect to a wildcard listener
+with a literal IP address; arbitrary HTTP `Host` names remain rejected. A
+wildcard bind exposes the dashboard on every available interface, and bearer
+authentication does not encrypt its HTTP traffic. Prefer loopback with an SSH
+tunnel. If direct network access is necessary, restrict the port with a
+firewall and protect the token and network path. Concrete non-loopback bind
+addresses remain rejected; use the wildcard form to opt in explicitly.
 
 ## queue and history inspection
 
@@ -357,6 +392,8 @@ In this form, slipway passes `args` to the runtime CLI unchanged, so they must
 include the runtime subcommand, image, and all runtime-specific options.
 Nonempty raw `args` cannot be combined with structured container fields.
 Structured container fields cannot be used with `executor: command`.
+`slipway parse -- docker ...` generates this form so it can preserve the
+original invocation without depending on a particular Docker option version.
 
 The pipeline `env` and `working_directory` settings configure the host-side
 runtime CLI process. Use `container_env` for explicit container variables and
@@ -535,7 +572,7 @@ per-user daemon is recommended for interactive and user-owned workloads.
 - `internal/daemon`: one instance's component lifecycle and discovery-to-queue
   wiring
 - `internal/control`: instance supervision, Unix-socket API, and client
-- `internal/webui`: optional loopback dashboard API and embedded frontend
+- `internal/webui`: optional token-protected dashboard API and embedded frontend
 - `internal/cli`: command parsing for the `slipway` client and `slipwayd` daemon
 
 The worker depends on the executor interface rather than the local

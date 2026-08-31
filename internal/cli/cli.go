@@ -76,6 +76,8 @@ func RunVersion(args []string, stdout, stderr io.Writer, version string) int {
 		return 0
 	case "check":
 		err = checkCommand(args[1:], stdout, stderr)
+	case "parse":
+		err = parseCommand(args[1:], stdout, stderr)
 	case "run":
 		err = runCommand(args[1:], stdout, stderr)
 	case "start":
@@ -598,6 +600,7 @@ func printUsage(output io.Writer) {
 Usage:
   slipway version
   slipway check [--raw] [--config path]
+  slipway parse [--name name] -- <program> [argument ...]
   slipway run [--config path] [--name name] [--socket path]
   slipway start [--config path] [--name name] [--socket path]
   slipway ps [--all] [--socket path]
@@ -612,5 +615,6 @@ For check, run, start, and inspection commands, --config and SLIPWAY_CONFIG may
 select one YAML file or a directory of YAML files. With neither, slipway loads
 configs from /etc/slipway.d and ~/.local/slipway.d, then falls back to ./slipway.yaml.
 Run uses a reachable daemon and otherwise logs that it is running daemonless.
-Start, ps, and stop require a daemon started separately with slipwayd.`)
+Start, ps, and stop require a daemon started separately with slipwayd.
+Parse prints a pipeline YAML fragment without executing the supplied command.`)
 }

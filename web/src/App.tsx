@@ -144,7 +144,9 @@ function TokenGate({
             Open dashboard <span aria-hidden="true">→</span>
           </button>
         </form>
-        <p className="auth-note">The dashboard is loopback-only and does not send this token anywhere else.</p>
+        <p className="auth-note">
+          This token is sent with dashboard API requests. Plain HTTP does not protect it on an untrusted network.
+        </p>
       </section>
       <div className="auth-grid" aria-hidden="true" />
     </main>

@@ -1,4 +1,4 @@
-// Package webui exposes slipway's optional loopback-only web dashboard.
+// Package webui exposes slipway's optional web dashboard.
 package webui
 
 import (
@@ -29,8 +29,9 @@ const shutdownTimeout = 5 * time.Second
 var embeddedAssets embed.FS
 
 // Server serves an embedded single-page application and its narrow JSON API.
-// It deliberately accepts loopback listeners only; remote access should use an
-// authenticated tunnel or reverse proxy.
+// Loopback listeners are recommended. A wildcard listener is allowed as an
+// explicit opt-in and logs a warning because it exposes the dashboard beyond
+// the local machine.
 type Server struct {
 	listener   net.Listener
 	httpServer *http.Server
@@ -43,7 +44,7 @@ type Server struct {
 }
 
 // NewServer acquires address immediately and constructs a web server. The
-// address must contain an explicit loopback host and TCP port.
+// address must contain an explicit loopback or wildcard host and TCP port.
 func NewServer(address, tokenPath string, manager *control.Manager, logger *slog.Logger) (*Server, error) {
 	if manager == nil {
 		return nil, errors.New("webui: manager is required")
@@ -52,7 +53,8 @@ func NewServer(address, tokenPath string, manager *control.Manager, logger *slog
 	if address == "" {
 		return nil, errors.New("webui: listen address is required")
 	}
-	if err := validateLoopbackAddress(address); err != nil {
+	wildcard, err := validateListenAddress(address)
+	if err != nil {
 		return nil, err
 	}
 	tokenPath = strings.TrimSpace(tokenPath)
@@ -68,16 +70,16 @@ func NewServer(address, tokenPath string, manager *control.Manager, logger *slog
 		return nil, fmt.Errorf("webui: listen on %s: %w", address, err)
 	}
 	tcpAddress, ok := listener.Addr().(*net.TCPAddr)
-	if !ok || tcpAddress.IP == nil || !tcpAddress.IP.IsLoopback() {
+	if !ok || tcpAddress.IP == nil || (!tcpAddress.IP.IsLoopback() && !(wildcard && tcpAddress.IP.IsUnspecified())) {
 		_ = listener.Close()
-		return nil, fmt.Errorf("webui: resolved listen address %q is not loopback", address)
+		return nil, fmt.Errorf("webui: resolved listen address %q is neither loopback nor wildcard", address)
 	}
 	token, err := writeAccessToken(tokenPath)
 	if err != nil {
 		_ = listener.Close()
 		return nil, err
 	}
-	handler, err := newHandler(manager, logger, token)
+	handler, err := newHandlerForListener(manager, logger, token, wildcard)
 	if err != nil {
 		_ = listener.Close()
 		removeAccessToken(tokenPath, token)
@@ -96,6 +98,10 @@ func NewServer(address, tokenPath string, manager *control.Manager, logger *slog
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       time.Minute,
 		MaxHeaderBytes:    16 << 10,
+	}
+	if wildcard {
+		logger.Warn("web dashboard is listening on all network interfaces; remote traffic is unencrypted, so protect the access token and restrict network access",
+			"address", server.address)
 	}
 	return server, nil
 }
@@ -157,20 +163,26 @@ func removeAccessToken(filename, token string) {
 	}
 }
 
-func validateLoopbackAddress(address string) error {
+func validateListenAddress(address string) (bool, error) {
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {
-		return fmt.Errorf("webui: listen address must be host:port: %w", err)
+		return false, fmt.Errorf("webui: listen address must be host:port: %w", err)
 	}
 	host = strings.Trim(host, "[]")
 	if strings.EqualFold(host, "localhost") {
-		return nil
+		return false, nil
 	}
 	ip := net.ParseIP(host)
-	if ip == nil || !ip.IsLoopback() {
-		return fmt.Errorf("webui: refusing non-loopback listen address %q; use an authenticated tunnel for remote access", address)
+	if ip == nil {
+		return false, fmt.Errorf("webui: refusing non-loopback listen address %q; use an authenticated tunnel for remote access", address)
 	}
-	return nil
+	if ip.IsLoopback() {
+		return false, nil
+	}
+	if ip.IsUnspecified() {
+		return true, nil
+	}
+	return false, fmt.Errorf("webui: refusing non-loopback listen address %q; use a wildcard listener or authenticated tunnel for remote access", address)
 }
 
 // Address returns the acquired TCP address.
@@ -251,6 +263,10 @@ func (server *Server) Close() error {
 }
 
 func newHandler(manager *control.Manager, logger *slog.Logger, token string) (http.Handler, error) {
+	return newHandlerForListener(manager, logger, token, false)
+}
+
+func newHandlerForListener(manager *control.Manager, logger *slog.Logger, token string, allowRemoteIPHosts bool) (http.Handler, error) {
 	dist, err := fs.Sub(embeddedAssets, "dist")
 	if err != nil {
 		return nil, fmt.Errorf("webui: open embedded assets: %w", err)
@@ -299,7 +315,7 @@ func newHandler(manager *control.Manager, logger *slog.Logger, token string) (ht
 		_, _ = output.Write(index)
 	})
 
-	return securityHeaders(validateHost(requireAPIAuth(token, mux))), nil
+	return securityHeaders(validateHost(requireAPIAuth(token, mux), allowRemoteIPHosts)), nil
 }
 
 func requireAPIAuth(token string, next http.Handler) http.Handler {
@@ -331,7 +347,7 @@ func securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
-func validateHost(next http.Handler) http.Handler {
+func validateHost(next http.Handler, allowRemoteIPs bool) http.Handler {
 	return http.HandlerFunc(func(output http.ResponseWriter, request *http.Request) {
 		host := request.Host
 		if parsed, _, err := net.SplitHostPort(host); err == nil {
@@ -339,7 +355,7 @@ func validateHost(next http.Handler) http.Handler {
 		}
 		host = strings.Trim(host, "[]")
 		ip := net.ParseIP(host)
-		if !strings.EqualFold(host, "localhost") && (ip == nil || !ip.IsLoopback()) {
+		if !strings.EqualFold(host, "localhost") && (ip == nil || (!ip.IsLoopback() && !allowRemoteIPs)) {
 			http.Error(output, "unrecognized host", http.StatusMisdirectedRequest)
 			return
 		}

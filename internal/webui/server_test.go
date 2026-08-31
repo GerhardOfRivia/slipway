@@ -1,9 +1,12 @@
 package webui
 
 import (
+	"bytes"
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +16,7 @@ import (
 	"github.com/GerhardOfRivia/slipway/internal/control"
 )
 
-func TestServerRequiresLoopbackAndManagesPrivateToken(t *testing.T) {
+func TestServerAllowsWildcardWithWarningAndManagesPrivateToken(t *testing.T) {
 	t.Parallel()
 	manager, err := control.NewManager(control.Options{Logger: testLogger()})
 	if err != nil {
@@ -29,9 +32,35 @@ func TestServerRequiresLoopbackAndManagesPrivateToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	tokenPath := filepath.Join(tokenDirectory, "web.token")
-	if server, err := NewServer("0.0.0.0:0", tokenPath, manager, testLogger()); err == nil {
-		_ = server.Close()
-		t.Fatal("NewServer accepted a wildcard listener")
+	var wildcardLogs bytes.Buffer
+	wildcardLogger := slog.New(slog.NewTextHandler(&wildcardLogs, nil))
+	wildcardServer, err := NewServer("0.0.0.0:0", tokenPath, manager, wildcardLogger)
+	if err != nil {
+		t.Fatalf("NewServer wildcard: %v", err)
+	}
+	for _, want := range []string{"level=WARN", "all network interfaces", "access token"} {
+		if !strings.Contains(wildcardLogs.String(), want) {
+			t.Errorf("wildcard log %q does not contain %q", wildcardLogs.String(), want)
+		}
+	}
+	remoteRequest := httptest.NewRequest(http.MethodGet, "http://192.0.2.25/", nil)
+	remoteRequest.Host = "192.0.2.25:8080"
+	remoteResponse := httptest.NewRecorder()
+	wildcardServer.httpServer.Handler.ServeHTTP(remoteResponse, remoteRequest)
+	if remoteResponse.Code != http.StatusOK {
+		t.Fatalf("wildcard remote-IP Host status = %d, want 200", remoteResponse.Code)
+	}
+	dnsRequest := httptest.NewRequest(http.MethodGet, "http://dashboard.example/", nil)
+	dnsResponse := httptest.NewRecorder()
+	wildcardServer.httpServer.Handler.ServeHTTP(dnsResponse, dnsRequest)
+	if dnsResponse.Code != http.StatusMisdirectedRequest {
+		t.Fatalf("wildcard named Host status = %d, want 421", dnsResponse.Code)
+	}
+	if err := wildcardServer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewServer("192.0.2.25:0", tokenPath, manager, testLogger()); err == nil {
+		t.Fatal("NewServer accepted a concrete non-loopback listener")
 	}
 
 	server, err := NewServer("127.0.0.1:0", tokenPath, manager, testLogger())
@@ -120,5 +149,34 @@ func TestServerRequiresLoopbackAndManagesPrivateToken(t *testing.T) {
 	}
 	if _, err := os.Stat(tokenPath); !os.IsNotExist(err) {
 		t.Fatalf("token after close: %v", err)
+	}
+}
+
+func TestValidateListenAddress(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		address      string
+		wantWildcard bool
+		wantError    bool
+	}{
+		{address: "127.0.0.1:8080"},
+		{address: "[::1]:8080"},
+		{address: "localhost:8080"},
+		{address: "0.0.0.0:8080", wantWildcard: true},
+		{address: "[::]:8080", wantWildcard: true},
+		{address: "192.0.2.25:8080", wantError: true},
+		{address: "dashboard.example:8080", wantError: true},
+		{address: "127.0.0.1", wantError: true},
+	}
+	for _, test := range tests {
+		t.Run(test.address, func(t *testing.T) {
+			wildcard, err := validateListenAddress(test.address)
+			if (err != nil) != test.wantError {
+				t.Fatalf("validateListenAddress(%q) error = %v, wantError %t", test.address, err, test.wantError)
+			}
+			if wildcard != test.wantWildcard {
+				t.Errorf("validateListenAddress(%q) wildcard = %t, want %t", test.address, wildcard, test.wantWildcard)
+			}
+		})
 	}
 }

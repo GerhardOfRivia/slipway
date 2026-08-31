@@ -64,7 +64,7 @@ func daemonCommand(args []string, stderr io.Writer) error {
 	flags := newFlagSet("slipwayd", stderr, "slipwayd [--config path] [--socket path] [--web-listen address] [--log-level level]")
 	configPath := flags.String("config", configPathDefault(), "optional YAML file or directory to start when the daemon starts")
 	socketPath := flags.String("socket", "", "control socket (defaults to SLIPWAY_SOCKET or a per-user path)")
-	webListen := flags.String("web-listen", webListenDefault(), "optional loopback address for the web dashboard (for example 127.0.0.1:8080)")
+	webListen := flags.String("web-listen", webListenDefault(), "optional loopback or wildcard address for the web dashboard (for example 127.0.0.1:8080)")
 	logLevel := flags.String("log-level", "info", "debug, info, warn, or error")
 	if err := flags.Parse(args); err != nil {
 		return err
