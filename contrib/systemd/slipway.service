@@ -12,9 +12,9 @@ Group=slipway
 
 # Override either value in /etc/default/slipway when another bootstrap selection
 # or socket is preferred. The leading '-' makes the environment file optional.
-Environment=SLIPWAY_CONFIG=/etc/slipway.d
-Environment=SLIPWAY_SOCKET=/run/slipway/slipway.sock
-# Set SLIPWAY_WEB_LISTEN=127.0.0.1:8080 in /etc/default/slipway to opt in to the
+# Environment=SLIPWAY_CONFIG=/etc/slipway.d
+# Environment=SLIPWAY_SOCKET=/run/slipway/slipway.sock
+# Environment=SLIPWAY_WEB_LISTEN=127.0.0.1:8080
 # token-protected dashboard. It is intentionally disabled by default.
 EnvironmentFile=-/etc/default/slipway
 
