@@ -690,6 +690,59 @@ func TestManagerBoundsTerminalInstanceRetention(t *testing.T) {
 	}
 }
 
+func TestAttachedRemoveOnExitPreservesAttachmentAndReleasesName(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	path := filepath.Join(root, "ephemeral.yaml")
+	manager := newTestManager(t, Options{
+		Loader: mappedLoader(t, map[string]*config.Config{
+			path: testConfig(filepath.Join(root, "ephemeral.db")),
+		}),
+		Runner: func(context.Context, *config.Config, *slog.Logger) error {
+			return nil
+		},
+		IDGenerator: sequenceIDGenerator("00000000000c", "00000000000d"),
+	})
+
+	first, attachment, err := manager.startAttachedContext(context.Background(), path, "ephemeral", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer attachment.Cancel()
+	finished, err := attachment.Wait(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if finished.ID != first.ID || finished.Name != "ephemeral" || finished.State != StateExited || finished.FinishedAt == nil {
+		t.Fatalf("remove-on-exit attachment result = %+v", finished)
+	}
+	if instances := manager.List(true); len(instances) != 0 {
+		t.Fatalf("instances retained after remove-on-exit = %+v", instances)
+	}
+	if _, err := manager.Wait(context.Background(), first.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("registry lookup after remove-on-exit error = %v, want ErrNotFound", err)
+	}
+	if queues := manager.KnownQueues(); len(queues) != 1 || queues[0].ConfigPath != path {
+		t.Fatalf("known queues after remove-on-exit = %+v", queues)
+	}
+
+	restarted, err := manager.StartMany([]string{path}, "ephemeral")
+	if err != nil {
+		t.Fatalf("reuse removed instance name: %v", err)
+	}
+	if len(restarted) != 1 || restarted[0].ID != "00000000000d" || restarted[0].Name != "ephemeral" {
+		t.Fatalf("restarted instance = %+v", restarted)
+	}
+	if _, err := manager.Wait(context.Background(), restarted[0].ID); err != nil {
+		t.Fatal(err)
+	}
+
+	finishedAgain, err := attachment.Wait(context.Background())
+	if err != nil || finishedAgain.ID != first.ID || finishedAgain.State != StateExited {
+		t.Fatalf("attachment after name reuse = %+v, %v", finishedAgain, err)
+	}
+}
+
 func TestAttachedStartSurvivesTerminalRegistryEviction(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

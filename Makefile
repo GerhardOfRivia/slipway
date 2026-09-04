@@ -3,7 +3,7 @@
 OUTPUT ?= bin
 SLIPWAY_OUTPUT ?= $(OUTPUT)/slipway
 SLIPWAYD_OUTPUT ?= $(OUTPUT)/slipwayd
-SEMVER ?= 1.0.4
+SEMVER ?= 1.0.5
 VERSION ?= $(SEMVER)-dev
 RELEASE_TAG ?= v$(SEMVER)
 LDFLAGS = -ldflags "-X main.Version=$(VERSION)"

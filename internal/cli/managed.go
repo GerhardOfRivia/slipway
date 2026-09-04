@@ -52,7 +52,8 @@ func startCommand(args []string, stdout, stderr io.Writer) error {
 }
 
 func runCommand(args []string, stdout, stderr io.Writer) error {
-	flags := newFlagSet("run", stderr, "slipway run [--config path] [--name name] [--socket path]")
+	flags := newFlagSet("run", stderr, "slipway run [--rm] [--config path] [--name name] [--socket path]")
+	remove := flags.Bool("rm", false, "remove daemon-managed instances when they exit")
 	configPath := flags.String("config", configPathDefault(), "YAML configuration file or directory")
 	name := flags.String("name", "", "instance name or daemonless log label (only with one config)")
 	socketPath := flags.String("socket", "", "control socket (defaults to SLIPWAY_SOCKET or a per-user path)")
@@ -89,6 +90,7 @@ func runCommand(args []string, stdout, stderr io.Writer) error {
 		*name,
 		stdout,
 		stderr,
+		*remove,
 		client,
 		daemon.RunMany,
 	)
@@ -99,7 +101,7 @@ type selectedConfigRunner func(context.Context, []daemon.NamedConfig, *slog.Logg
 type runControlClient interface {
 	SocketPath() string
 	List(context.Context, bool) ([]control.Instance, error)
-	Run(context.Context, string, string, func(control.RunEvent) error) (control.Instance, error)
+	RunWithOptions(context.Context, string, string, control.RunOptions, func(control.RunEvent) error) (control.Instance, error)
 	Stop(context.Context, string) (control.Instance, error)
 }
 
@@ -107,6 +109,7 @@ func runSelectedConfigsPreferDaemon(
 	ctx context.Context,
 	selection, name string,
 	stdout, stderr io.Writer,
+	remove bool,
 	client runControlClient,
 	localRunner selectedConfigRunner,
 ) error {
@@ -122,7 +125,7 @@ func runSelectedConfigsPreferDaemon(
 	_, err = client.List(probeContext, false)
 	cancelProbe()
 	if err == nil {
-		return runDaemonConfigs(ctx, paths, name, stdout, client)
+		return runDaemonConfigs(ctx, paths, name, remove, stdout, client)
 	}
 	if ctx.Err() != nil && cancellationOnlyFrom(err, ctx.Err()) {
 		return nil
@@ -190,6 +193,7 @@ func runDaemonConfigs(
 	ctx context.Context,
 	paths []string,
 	name string,
+	remove bool,
 	output io.Writer,
 	client runControlClient,
 ) error {
@@ -207,7 +211,7 @@ func runDaemonConfigs(
 		go func() {
 			results <- result{
 				path: path,
-				err:  runDaemonConfig(runContext, path, name, stream, client),
+				err:  runDaemonConfig(runContext, path, name, remove, stream, client),
 			}
 		}()
 	}
@@ -238,11 +242,12 @@ func runDaemonConfigs(
 func runDaemonConfig(
 	ctx context.Context,
 	path, name string,
+	remove bool,
 	output io.Writer,
 	client runControlClient,
 ) error {
 	var started control.Instance
-	finished, err := client.Run(ctx, path, name, func(event control.RunEvent) error {
+	finished, err := client.RunWithOptions(ctx, path, name, control.RunOptions{RemoveOnExit: remove}, func(event control.RunEvent) error {
 		switch event.Type {
 		case "started":
 			started = event.Instance

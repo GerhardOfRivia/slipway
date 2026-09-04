@@ -152,18 +152,32 @@ func (client *Client) Stop(ctx context.Context, selector string) (Instance, erro
 	return response.Instance, nil
 }
 
-// Run starts exactly one configuration and consumes its attachment stream.
-// Returning from onEvent with an error, canceling ctx, or losing the connection
-// detaches the client; none of those actions implicitly stops the instance.
+// Run starts exactly one configuration, retains its terminal instance in the
+// daemon, and consumes its attachment stream.
 func (client *Client) Run(
 	ctx context.Context,
 	configPath string,
 	name string,
 	onEvent func(RunEvent) error,
 ) (Instance, error) {
-	request, err := client.newJSONRequest(ctx, http.MethodPost, "/v1/run", startRequest{
-		ConfigPath: configPath,
-		Name:       name,
+	return client.RunWithOptions(ctx, configPath, name, RunOptions{}, onEvent)
+}
+
+// RunWithOptions starts exactly one configuration and consumes its attachment
+// stream. Returning from onEvent with an error, canceling ctx, or losing the
+// connection detaches the client; none of those actions implicitly stops the
+// instance.
+func (client *Client) RunWithOptions(
+	ctx context.Context,
+	configPath string,
+	name string,
+	options RunOptions,
+	onEvent func(RunEvent) error,
+) (Instance, error) {
+	request, err := client.newJSONRequest(ctx, http.MethodPost, "/v1/run", runRequest{
+		ConfigPath:   configPath,
+		Name:         name,
+		RemoveOnExit: options.RemoveOnExit,
 	})
 	if err != nil {
 		return Instance{}, err

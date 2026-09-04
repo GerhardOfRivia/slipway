@@ -601,7 +601,7 @@ Usage:
   slipway version
   slipway check [--raw] [--config path]
   slipway parse [--name name] -- <program> [argument ...]
-  slipway run [--config path] [--name name] [--socket path]
+  slipway run [--rm] [--config path] [--name name] [--socket path]
   slipway start [--config path] [--name name] [--socket path]
   slipway ps [--all] [--socket path]
   slipway stop [--socket path] <id-or-name> [id-or-name ...]
@@ -615,6 +615,7 @@ For check, run, start, and inspection commands, --config and SLIPWAY_CONFIG may
 select one YAML file or a directory of YAML files. With neither, slipway loads
 configs from /etc/slipway.d and ~/.local/slipway.d, then falls back to ./slipway.yaml.
 Run uses a reachable daemon and otherwise logs that it is running daemonless.
-Start, ps, and stop require a daemon started separately with slipwayd.
+With --rm, daemon-managed run instances are removed after they exit. Start, ps,
+and stop require a daemon started separately with slipwayd.
 Parse prints a pipeline YAML fragment without executing the supplied command.`)
 }

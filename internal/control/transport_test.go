@@ -143,6 +143,140 @@ func TestUnixHTTPRunStreamsStartedLogsAndExited(t *testing.T) {
 	if !foundConfigHash {
 		t.Fatalf("Run events did not contain config hash %q: %+v", finished.ConfigHash, events)
 	}
+	retained, err := client.List(ctx, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(retained) != 1 || retained[0].ID != finished.ID || retained[0].State != StateExited {
+		t.Fatalf("retained instances after ordinary Run = %+v", retained)
+	}
+}
+
+func TestUnixHTTPRunRemoveOnExitRemovesTerminalInstance(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	configPath := filepath.Join(root, "ephemeral.yaml")
+	manager, client, _ := newUnixTransportHarness(t, Options{
+		Loader: mappedLoader(t, map[string]*config.Config{
+			configPath: testConfig(filepath.Join(root, "ephemeral.db")),
+		}),
+		Runner: func(_ context.Context, _ *config.Config, logger *slog.Logger) error {
+			logger.Info("ephemeral payload")
+			return nil
+		},
+		IDGenerator: sequenceIDGenerator("00000000000a"),
+		LogCapacity: 16,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	var events []RunEvent
+	finished, err := client.RunWithOptions(ctx, configPath, "ephemeral", RunOptions{RemoveOnExit: true}, func(event RunEvent) error {
+		events = append(events, event)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if finished.ID != "00000000000a" || finished.State != StateExited || finished.FinishedAt == nil {
+		t.Fatalf("Run result = %+v", finished)
+	}
+	if len(events) < 3 || events[0].Type != "started" || events[len(events)-1].Type != "exited" {
+		t.Fatalf("remove-on-exit Run events = %+v, want started, logs, and exited", events)
+	}
+	foundPayload := false
+	for _, event := range events {
+		if event.Type == "log" && strings.Contains(event.Log, "ephemeral payload") {
+			foundPayload = true
+			break
+		}
+	}
+	if !foundPayload {
+		t.Fatalf("remove-on-exit Run events did not contain runner log: %+v", events)
+	}
+	instances, err := client.List(ctx, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(instances) != 0 {
+		t.Fatalf("retained instances after remove-on-exit Run = %+v", instances)
+	}
+	if queues := manager.KnownQueues(); len(queues) != 1 || queues[0].ConfigPath != configPath {
+		t.Fatalf("known queues after remove-on-exit Run = %+v", queues)
+	}
+}
+
+func TestUnixHTTPRemoveOnExitSurvivesDetachThenStop(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	configPath := filepath.Join(root, "cancel.yaml")
+	runnerStarted := make(chan struct{})
+	_, client, _ := newUnixTransportHarness(t, Options{
+		Loader: mappedLoader(t, map[string]*config.Config{
+			configPath: testConfig(filepath.Join(root, "cancel.db")),
+		}),
+		Runner: func(ctx context.Context, _ *config.Config, _ *slog.Logger) error {
+			close(runnerStarted)
+			<-ctx.Done()
+			return ctx.Err()
+		},
+		IDGenerator: sequenceIDGenerator("00000000000e"),
+	})
+
+	requestContext, cancelRequest := context.WithCancel(context.Background())
+	runDone := make(chan error, 1)
+	started := make(chan Instance, 1)
+	go func() {
+		_, err := client.RunWithOptions(requestContext, configPath, "cancel", RunOptions{RemoveOnExit: true}, func(event RunEvent) error {
+			if event.Type == "started" {
+				started <- event.Instance
+			}
+			return nil
+		})
+		runDone <- err
+	}()
+
+	var instance Instance
+	select {
+	case instance = <-started:
+	case <-time.After(2 * time.Second):
+		cancelRequest()
+		t.Fatal("remove-on-exit Run did not start")
+	}
+	select {
+	case <-runnerStarted:
+	case <-time.After(2 * time.Second):
+		cancelRequest()
+		t.Fatal("remove-on-exit runner did not start")
+	}
+	cancelRequest()
+	select {
+	case err := <-runDone:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("detached Run error = %v, want context.Canceled", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("canceled Run attachment did not return")
+	}
+
+	stopContext, cancelStop := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancelStop()
+	stopped, err := client.Stop(stopContext, instance.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stopped.ID != instance.ID || stopped.State != StateExited || stopped.FinishedAt == nil {
+		t.Fatalf("Stop result = %+v", stopped)
+	}
+	retained, err := client.List(stopContext, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(retained) != 0 {
+		t.Fatalf("instances after remove-on-exit Stop = %+v", retained)
+	}
 }
 
 func TestUnixHTTPDroppedRunAttachmentDoesNotStopInstance(t *testing.T) {
@@ -210,6 +344,81 @@ func TestUnixHTTPDroppedRunAttachmentDoesNotStopInstance(t *testing.T) {
 		}
 	case <-ctx.Done():
 		t.Fatal("explicit Stop did not stop detached runtime")
+	}
+}
+
+func TestUnixHTTPDroppedRemoveOnExitAttachmentEventuallyRemovesInstance(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	configPath := filepath.Join(root, "detached-ephemeral.yaml")
+	runnerStarted := make(chan struct{})
+	releaseRunner := make(chan struct{})
+	runnerReturned := make(chan struct{})
+	_, client, _ := newUnixTransportHarness(t, Options{
+		Loader: mappedLoader(t, map[string]*config.Config{
+			configPath: testConfig(filepath.Join(root, "detached-ephemeral.db")),
+		}),
+		Runner: func(ctx context.Context, _ *config.Config, _ *slog.Logger) error {
+			close(runnerStarted)
+			defer close(runnerReturned)
+			select {
+			case <-releaseRunner:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		},
+		IDGenerator: sequenceIDGenerator("00000000000b"),
+	})
+
+	detached := errors.New("test client detached")
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	instance, err := client.RunWithOptions(ctx, configPath, "detached-ephemeral", RunOptions{RemoveOnExit: true}, func(event RunEvent) error {
+		if event.Type == "started" {
+			return detached
+		}
+		return nil
+	})
+	if !errors.Is(err, detached) {
+		t.Fatalf("Run detach error = %v, want %v", err, detached)
+	}
+	if instance.ID != "00000000000b" || instance.State != StateRunning {
+		t.Fatalf("instance returned at detach = %+v", instance)
+	}
+	select {
+	case <-runnerStarted:
+	case <-ctx.Done():
+		t.Fatal("detached runner did not start")
+	}
+	active, err := client.List(ctx, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(active) != 1 || active[0].ID != instance.ID {
+		t.Fatalf("active instances after detach = %+v", active)
+	}
+
+	close(releaseRunner)
+	select {
+	case <-runnerReturned:
+	case <-ctx.Done():
+		t.Fatal("detached runner did not return")
+	}
+	for {
+		instances, listErr := client.List(ctx, true)
+		if listErr != nil {
+			t.Fatal(listErr)
+		}
+		if len(instances) == 0 {
+			break
+		}
+		select {
+		case <-time.After(10 * time.Millisecond):
+		case <-ctx.Done():
+			t.Fatalf("remove-on-exit instance remained retained: %+v", instances)
+		}
 	}
 }
 

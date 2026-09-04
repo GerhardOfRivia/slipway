@@ -32,11 +32,13 @@ for them. If no daemon is listening, it logs that it is running daemonless and
 runs the selected configs in the current process instead. It accepts one YAML
 file or a directory of YAML files and runs every selected config concurrently.
 Press Ctrl-C to stop all selected configs gracefully, including acknowledged
-daemon-managed instances. For one selected config, `--name` sets its daemon
-instance name or its daemonless log label. `--socket` uses the same explicit,
-environment, and per-user resolution as other daemon commands. Errors such as
-denied socket access or a daemon rejecting a config do not trigger daemonless
-execution.
+daemon-managed instances. `--rm` removes daemon-managed instances from
+slipwayd after they exit instead of retaining them in instance history; it is a
+no-op during daemonless fallback. For one selected config, `--name` sets its
+daemon instance name or its daemonless log label. `--socket` uses the same
+explicit, environment, and per-user resolution as other daemon commands.
+Errors such as denied socket access or a daemon rejecting a config do not
+trigger daemonless execution.
 
 To manage an instance in the background, first start the daemon as the user that
 should run the configured programs:
@@ -143,15 +145,18 @@ The daemon exposes its lifecycle API over a local Unix socket:
 
 ```text
 slipwayd [--socket path] [--config path] [--web-listen address] [--log-level level]
-slipway run --config file-or-directory [--name name] [--socket path]
+slipway run [--rm] [--config file-or-directory] [--name name] [--socket path]
 slipway start --config file-or-directory [--name name] [--socket path]
 slipway ps [--all] [--socket path]
 slipway stop [--socket path] id-or-name [id-or-name ...]
 ```
 
 When the daemon is reachable, `run` creates one or more attached instances and
-streams their logs until they finish. `start` creates detached instances. `ps`
-lists running instances;
+streams their logs until they finish. With `--rm`, each attached instance is
+removed from the daemon registry after it exits, including when it fails; its
+durable queue is preserved. Disconnecting the client does not stop or remove a
+live instance, but the daemon still removes it when it eventually exits.
+`start` creates detached instances. `ps` lists running instances;
 `ps --all` also shows the 100 most recent stopped and failed instances from the
 current daemon lifetime. `stop` accepts any mixture of instance IDs and names.
 `start`, `ps`, and `stop` require a running daemon; `run` falls back as described
@@ -177,8 +182,9 @@ it private and prefer one daemon per user. Do not expose the socket to
 untrusted users.
 
 The MVP instance registry is held in memory. Active entries and the 100 most
-recent terminal entries are retained; older terminal entries are evicted. The
-registry is lost when the daemon exits, while queue databases remain durable.
+recent terminal entries are retained, except for instances started by
+`run --rm`; older terminal entries are evicted. The registry is lost when the
+daemon exits, while queue databases remain durable.
 Configs supplied to `slipwayd` with `--config`, or through `SLIPWAY_CONFIG`, are
 bootstrapped again after the daemon restarts; instances created with `start`
 must otherwise be submitted again.
@@ -531,12 +537,13 @@ interpret the arguments it receives.
 
 Stopping or timing out a Docker or Podman step terminates the runtime CLI
 process group, but a container managed by a separate runtime daemon may outlive
-that CLI. `run --rm` removes the container after it eventually exits; it does
-not stop a live container whose CLI was killed. When cancellation must extend
-to the container, use a runtime-aware wrapper or container-side deadline that
-reliably stops it. Bind-mount sources must be accessible to the selected
-runtime. slipway does not create or transfer mount sources itself, though a
-runtime-specific option may ask the runtime to create one. In particular, a
+that CLI. The container runtime's `run --rm` removes the container after it
+eventually exits; it does not stop a live container whose CLI was killed. When
+cancellation must extend to the container, use a runtime-aware wrapper or
+container-side deadline that reliably stops it. Bind-mount sources must be
+accessible to the selected runtime. slipway does not create or transfer mount
+sources itself, though a runtime-specific option may ask the runtime to create
+one. In particular, a
 remote daemon or VM-backed runtime may not see paths from the daemon host.
 
 The optional `output` setting saves the command's complete stdout stream to a

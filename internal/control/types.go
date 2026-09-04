@@ -61,6 +61,13 @@ type Instance struct {
 	Error        string     `json:"error,omitempty"`
 }
 
+// RunOptions controls the lifecycle of an instance started through Client.RunWithOptions.
+type RunOptions struct {
+	// RemoveOnExit removes the terminal instance from the daemon's in-memory
+	// registry. It does not remove or modify the durable queue.
+	RemoveOnExit bool
+}
+
 // KnownQueue describes one durable queue successfully loaded during the
 // daemon's lifetime. Unlike the bounded instance history, this catalog is kept
 // until the daemon exits so queues remain discoverable after instances stop.

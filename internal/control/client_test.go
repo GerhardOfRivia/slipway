@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -134,6 +135,71 @@ func TestClientRunKeepsAcknowledgedStreamFailureOrdinary(t *testing.T) {
 	}
 	if instance.ID != "abc123def456" {
 		t.Fatalf("Run acknowledged instance = %+v", instance)
+	}
+}
+
+func TestClientRunSendsRemoveOnExit(t *testing.T) {
+	t.Parallel()
+	client := &Client{
+		socketPath: "/private/slipway.sock",
+		httpClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			if request.Method != http.MethodPost || request.URL.Path != "/v1/run" {
+				t.Fatalf("Run request = %s %s, want POST /v1/run", request.Method, request.URL.Path)
+			}
+			var input struct {
+				ConfigPath   string `json:"config_path"`
+				Name         string `json:"name"`
+				RemoveOnExit bool   `json:"remove_on_exit"`
+			}
+			if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+				t.Fatalf("decode Run request: %v", err)
+			}
+			if input.ConfigPath != "/configs/one.yaml" || input.Name != "ephemeral" || !input.RemoveOnExit {
+				t.Fatalf("Run request body = %+v", input)
+			}
+			body := `{"type":"started","instance":{"id":"abc123def456","state":"running"}}` + "\n" +
+				`{"type":"exited","instance":{"id":"abc123def456","state":"exited"}}` + "\n"
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(body)),
+				Header:     make(http.Header),
+			}, nil
+		})},
+	}
+
+	finished, err := client.RunWithOptions(context.Background(), "/configs/one.yaml", "ephemeral", RunOptions{RemoveOnExit: true}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if finished.ID != "abc123def456" || finished.State != StateExited {
+		t.Fatalf("Run result = %+v", finished)
+	}
+}
+
+func TestClientRunOmitsDefaultRemoveOnExit(t *testing.T) {
+	t.Parallel()
+	client := &Client{
+		socketPath: "/private/slipway.sock",
+		httpClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			var input map[string]json.RawMessage
+			if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+				t.Fatalf("decode Run request: %v", err)
+			}
+			if _, exists := input["remove_on_exit"]; exists {
+				t.Fatalf("default Run request unexpectedly contains remove_on_exit: %s", input["remove_on_exit"])
+			}
+			body := `{"type":"started","instance":{"id":"abc123def456","state":"running"}}` + "\n" +
+				`{"type":"exited","instance":{"id":"abc123def456","state":"exited"}}` + "\n"
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(body)),
+				Header:     make(http.Header),
+			}, nil
+		})},
+	}
+
+	if _, err := client.Run(context.Background(), "/configs/one.yaml", "retained", nil); err != nil {
+		t.Fatal(err)
 	}
 }
 

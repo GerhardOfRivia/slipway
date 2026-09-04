@@ -294,6 +294,20 @@ type startRequest struct {
 	Name        string   `json:"name,omitempty"`
 }
 
+type runRequest struct {
+	ConfigPaths  []string `json:"config_paths,omitempty"`
+	ConfigPath   string   `json:"config_path,omitempty"`
+	Name         string   `json:"name,omitempty"`
+	RemoveOnExit bool     `json:"remove_on_exit,omitempty"`
+}
+
+func (request runRequest) paths() ([]string, error) {
+	return (startRequest{
+		ConfigPaths: request.ConfigPaths,
+		ConfigPath:  request.ConfigPath,
+	}).paths()
+}
+
 func (request startRequest) paths() ([]string, error) {
 	paths := append([]string(nil), request.ConfigPaths...)
 	if strings.TrimSpace(request.ConfigPath) != "" {
@@ -388,7 +402,7 @@ func (server *Server) handleStop(output http.ResponseWriter, request *http.Reque
 }
 
 func (server *Server) handleRun(output http.ResponseWriter, request *http.Request) {
-	var input startRequest
+	var input runRequest
 	if err := decodeRequest(output, request, &input); err != nil {
 		writeAPIError(output, http.StatusBadRequest, "invalid_request", err)
 		return
@@ -407,7 +421,7 @@ func (server *Server) handleRun(output http.ResponseWriter, request *http.Reques
 		writeAPIError(output, http.StatusInternalServerError, "streaming_unsupported", errors.New("HTTP streaming is unavailable"))
 		return
 	}
-	instance, attachment, err := server.manager.StartAttachedContext(request.Context(), paths[0], input.Name)
+	instance, attachment, err := server.manager.startAttachedContext(request.Context(), paths[0], input.Name, input.RemoveOnExit)
 	if err != nil {
 		writeManagerError(output, err, true)
 		return

@@ -32,6 +32,7 @@ type runtimeInstance struct {
 	view           Instance
 	config         *config.Config
 	configIdentity string
+	removeOnExit   bool
 	ctx            context.Context
 	cancel         context.CancelFunc
 	done           chan struct{}
@@ -40,8 +41,8 @@ type runtimeInstance struct {
 }
 
 // Attachment pins the runtime, completion signal, and log subscription for
-// one attached start. It remains usable even after the manager's bounded
-// terminal-instance registry evicts the instance.
+// one attached start. It remains usable after the instance leaves the
+// manager's terminal registry through eviction or remove-on-exit.
 type Attachment struct {
 	manager      *Manager
 	runtime      *runtimeInstance
@@ -77,7 +78,8 @@ func (attachment *Attachment) Cancel() {
 }
 
 // Manager owns all runtime goroutines for one control-plane daemon. Completed
-// instances remain addressable for List(true), Wait, and retained logs.
+// instances remain addressable for List(true), Wait, and retained logs unless
+// their attached start requested removal on exit.
 type Manager struct {
 	mu sync.Mutex
 	// startGate serializes final filesystem identity checks and reservations
@@ -199,7 +201,7 @@ func (manager *Manager) StartMany(configPaths []string, name string) ([]Instance
 // inherit the manager context and therefore outlive the request that created
 // them. name may be supplied only when starting exactly one configuration.
 func (manager *Manager) StartManyContext(startContext context.Context, configPaths []string, name string) ([]Instance, error) {
-	result, err := manager.startManyContext(startContext, configPaths, name, false, nil)
+	result, err := manager.startManyContext(startContext, configPaths, name, false, false, nil)
 	return result.instances, err
 }
 
@@ -213,7 +215,7 @@ func (manager *Manager) StartKnownQueueContext(startContext context.Context, kno
 	}
 	copy := known
 	copy.DatabaseAliases = append([]string(nil), known.DatabaseAliases...)
-	result, err := manager.startManyContext(startContext, []string{known.ConfigPath}, "", false, &copy)
+	result, err := manager.startManyContext(startContext, []string{known.ConfigPath}, "", false, false, &copy)
 	return result.instances, err
 }
 
@@ -221,7 +223,11 @@ func (manager *Manager) StartKnownQueueContext(startContext context.Context, kno
 // retained-plus-live log stream and completion signal before the runner can
 // finish. This prevents retention eviction from racing attached clients.
 func (manager *Manager) StartAttachedContext(startContext context.Context, configPath, name string) (Instance, *Attachment, error) {
-	result, err := manager.startManyContext(startContext, []string{configPath}, name, true, nil)
+	return manager.startAttachedContext(startContext, configPath, name, false)
+}
+
+func (manager *Manager) startAttachedContext(startContext context.Context, configPath, name string, removeOnExit bool) (Instance, *Attachment, error) {
+	result, err := manager.startManyContext(startContext, []string{configPath}, name, true, removeOnExit, nil)
 	if err != nil {
 		return Instance{}, nil, err
 	}
@@ -231,7 +237,7 @@ func (manager *Manager) StartAttachedContext(startContext context.Context, confi
 	return result.instances[0], result.attachment, nil
 }
 
-func (manager *Manager) startManyContext(startContext context.Context, configPaths []string, name string, attach bool, expectedQueue *KnownQueue) (startResult, error) {
+func (manager *Manager) startManyContext(startContext context.Context, configPaths []string, name string, attach, removeOnExit bool, expectedQueue *KnownQueue) (startResult, error) {
 	if manager == nil {
 		return startResult{}, errors.New("control: manager is required")
 	}
@@ -461,6 +467,7 @@ func (manager *Manager) startManyContext(startContext context.Context, configPat
 			view:           view,
 			config:         item.candidate.config,
 			configIdentity: item.candidate.configIdentity,
+			removeOnExit:   removeOnExit,
 			ctx:            runContext,
 			cancel:         cancel,
 			done:           make(chan struct{}),
@@ -938,7 +945,14 @@ func (manager *Manager) run(runtime *runtimeInstance) {
 	// Publish terminal state and completion together under the manager mutex.
 	// Waiters that observe done closed cannot race an incomplete final view.
 	close(runtime.done)
-	manager.trimTerminatedLocked(runtime.view.ID)
+	if runtime.removeOnExit {
+		delete(manager.instances, runtime.view.ID)
+		if manager.names[runtime.view.Name] == runtime.view.ID {
+			delete(manager.names, runtime.view.Name)
+		}
+	} else {
+		manager.trimTerminatedLocked(runtime.view.ID)
+	}
 	manager.mu.Unlock()
 }
 

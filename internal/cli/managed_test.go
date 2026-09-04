@@ -284,14 +284,90 @@ func TestRunCommandUsesAvailableDaemon(t *testing.T) {
 	}
 }
 
+func TestRunCommandRemovesDaemonInstance(t *testing.T) {
+	tests := []struct {
+		name       string
+		runnerErr  error
+		wantCode   int
+		wantStderr string
+	}{
+		{name: "exited", wantCode: 0},
+		{name: "failed", runnerErr: errors.New("runner exploded"), wantCode: 1, wantStderr: "runner exploded"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			configPath := filepath.Join(root, "worker.yaml")
+			databasePath := filepath.Join(root, "worker.db")
+			if err := os.WriteFile(configPath, []byte("# accepted by the daemon's injected loader\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			manager, err := control.NewManager(control.Options{
+				Loader: func(path string) (*config.Config, error) {
+					if path != configPath {
+						return nil, fmt.Errorf("unexpected config path %q", path)
+					}
+					return &config.Config{Database: config.DatabaseConfig{Path: databasePath}}, nil
+				},
+				Runner:      func(context.Context, *config.Config, *slog.Logger) error { return test.runnerErr },
+				IDGenerator: func() (string, error) { return "abc123def456", nil },
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			socketPath := filepath.Join(root, "control", "slipway.sock")
+			server, err := control.NewServer(socketPath, manager, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			serveContext, cancelServe := context.WithCancel(context.Background())
+			serveDone := make(chan error, 1)
+			go func() { serveDone <- server.Serve(serveContext) }()
+			t.Cleanup(func() {
+				cancelServe()
+				select {
+				case err := <-serveDone:
+					if err != nil {
+						t.Errorf("control server shutdown: %v", err)
+					}
+				case <-time.After(3 * time.Second):
+					_ = server.Close()
+					t.Error("timed out waiting for control server shutdown")
+				}
+			})
+
+			code, _, stderr := managedCLI(t,
+				"run", "--rm", "--config", configPath, "--name", "ephemeral", "--socket", socketPath,
+			)
+			if code != test.wantCode {
+				t.Fatalf("run --rm code = %d, want %d; stderr = %q", code, test.wantCode, stderr)
+			}
+			if test.wantStderr == "" && stderr != "" {
+				t.Fatalf("run --rm stderr = %q, want empty", stderr)
+			}
+			if test.wantStderr != "" && !strings.Contains(stderr, test.wantStderr) {
+				t.Fatalf("run --rm stderr = %q, want it to contain %q", stderr, test.wantStderr)
+			}
+			if instances := manager.List(true); len(instances) != 0 {
+				t.Fatalf("daemon instances after run --rm = %+v, want none", instances)
+			}
+		})
+	}
+}
+
 func TestRunSelectionPrefersDaemonAndStreamsLogs(t *testing.T) {
 	configPath := writePlaceholderRunConfig(t, "worker.yaml")
 	localCalled := false
 	client := &stubRunControlClient{
 		socketPath: "/private/slipway.sock",
-		run: func(_ context.Context, path, name string, onEvent func(control.RunEvent) error) (control.Instance, error) {
+		run: func(_ context.Context, path, name string, remove bool, onEvent func(control.RunEvent) error) (control.Instance, error) {
 			if path != configPath || name != "nightly" {
 				t.Fatalf("daemon Run path/name = %q, %q", path, name)
+			}
+			if remove {
+				t.Fatal("daemon Run remove = true without --rm")
 			}
 			instance := control.Instance{ID: "000000000001", State: control.StateRunning}
 			if err := onEvent(control.RunEvent{Type: "started", Instance: instance}); err != nil {
@@ -306,7 +382,7 @@ func TestRunSelectionPrefersDaemonAndStreamsLogs(t *testing.T) {
 	}
 	var stdout, stderr bytes.Buffer
 	err := runSelectedConfigsPreferDaemon(
-		context.Background(), configPath, " nightly ", &stdout, &stderr, client,
+		context.Background(), configPath, " nightly ", &stdout, &stderr, false, client,
 		func(context.Context, []daemon.NamedConfig, *slog.Logger) error {
 			localCalled = true
 			return nil
@@ -339,7 +415,7 @@ func TestRunSelectionFallsBackOnlyWhenDaemonIsNotRunning(t *testing.T) {
 		}
 		var stdout, stderr bytes.Buffer
 		err := runSelectedConfigsPreferDaemon(
-			context.Background(), configPath, "", &stdout, &stderr, client,
+			context.Background(), configPath, "", &stdout, &stderr, true, client,
 			func(_ context.Context, configs []daemon.NamedConfig, logger *slog.Logger) error {
 				localCalled = true
 				if len(configs) != 1 || configs[0].Path != configPath {
@@ -375,7 +451,7 @@ func TestRunSelectionFallsBackOnlyWhenDaemonIsNotRunning(t *testing.T) {
 		}
 		var stdout, stderr bytes.Buffer
 		err := runSelectedConfigsPreferDaemon(
-			context.Background(), configPath, "", &stdout, &stderr, client,
+			context.Background(), configPath, "", &stdout, &stderr, false, client,
 			func(context.Context, []daemon.NamedConfig, *slog.Logger) error {
 				localCalled = true
 				return nil
@@ -399,12 +475,12 @@ func TestRunSelectionDoesNotFallBackAfterDaemonRunFailure(t *testing.T) {
 	want := &control.APIError{StatusCode: 422, Code: "start_failed", Message: "invalid daemon config"}
 	client := &stubRunControlClient{
 		socketPath: "/private/slipway.sock",
-		run: func(context.Context, string, string, func(control.RunEvent) error) (control.Instance, error) {
+		run: func(context.Context, string, string, bool, func(control.RunEvent) error) (control.Instance, error) {
 			return control.Instance{}, want
 		},
 	}
 	err := runSelectedConfigsPreferDaemon(
-		context.Background(), configPath, "", io.Discard, io.Discard, client,
+		context.Background(), configPath, "", io.Discard, io.Discard, false, client,
 		func(context.Context, []daemon.NamedConfig, *slog.Logger) error {
 			localCalled = true
 			return nil
@@ -422,12 +498,12 @@ func TestRunSelectionReportsDaemonManagedFailure(t *testing.T) {
 	configPath := writePlaceholderRunConfig(t, "worker.yaml")
 	client := &stubRunControlClient{
 		socketPath: "/private/slipway.sock",
-		run: func(context.Context, string, string, func(control.RunEvent) error) (control.Instance, error) {
+		run: func(context.Context, string, string, bool, func(control.RunEvent) error) (control.Instance, error) {
 			return control.Instance{ID: "000000000002", State: control.StateFailed, Error: "runner exploded"}, nil
 		},
 	}
 	err := runSelectedConfigsPreferDaemon(
-		context.Background(), configPath, "", io.Discard, io.Discard, client,
+		context.Background(), configPath, "", io.Discard, io.Discard, false, client,
 		func(context.Context, []daemon.NamedConfig, *slog.Logger) error {
 			t.Fatal("daemonless runner was called")
 			return nil
@@ -438,7 +514,7 @@ func TestRunSelectionReportsDaemonManagedFailure(t *testing.T) {
 	}
 }
 
-func TestRunSelectionUsesDaemonConcurrentlyForDirectory(t *testing.T) {
+func TestRunSelectionUsesDaemonConcurrentlyForDirectoryWithRemove(t *testing.T) {
 	root := t.TempDir()
 	configDirectory := filepath.Join(root, "configs")
 	if err := os.Mkdir(configDirectory, 0o700); err != nil {
@@ -452,7 +528,10 @@ func TestRunSelectionUsesDaemonConcurrentlyForDirectory(t *testing.T) {
 	release := make(chan struct{})
 	client := &stubRunControlClient{
 		socketPath: "/private/slipway.sock",
-		run: func(_ context.Context, path, _ string, onEvent func(control.RunEvent) error) (control.Instance, error) {
+		run: func(_ context.Context, path, _ string, remove bool, onEvent func(control.RunEvent) error) (control.Instance, error) {
+			if !remove {
+				t.Error("daemon directory Run remove = false with --rm")
+			}
 			started <- path
 			<-release
 			instance := control.Instance{ID: filepath.Base(path), State: control.StateRunning}
@@ -470,7 +549,7 @@ func TestRunSelectionUsesDaemonConcurrentlyForDirectory(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		done <- runSelectedConfigsPreferDaemon(
-			context.Background(), configDirectory, "", &stdout, io.Discard, client,
+			context.Background(), configDirectory, "", &stdout, io.Discard, true, client,
 			func(context.Context, []daemon.NamedConfig, *slog.Logger) error {
 				return errors.New("unexpected daemonless execution")
 			},
@@ -502,14 +581,17 @@ func TestRunSelectionUsesDaemonConcurrentlyForDirectory(t *testing.T) {
 	}
 }
 
-func TestRunSelectionStopsDaemonInstanceOnCancellation(t *testing.T) {
+func TestRunSelectionPassesRemoveOnExitAndStopsDaemonInstanceOnCancellation(t *testing.T) {
 	configPath := writePlaceholderRunConfig(t, "worker.yaml")
 	ctx, cancel := context.WithCancel(context.Background())
 	started := make(chan struct{})
 	stopped := make(chan string, 1)
 	client := &stubRunControlClient{
 		socketPath: "/private/slipway.sock",
-		run: func(ctx context.Context, _ string, _ string, onEvent func(control.RunEvent) error) (control.Instance, error) {
+		run: func(ctx context.Context, _ string, _ string, remove bool, onEvent func(control.RunEvent) error) (control.Instance, error) {
+			if !remove {
+				t.Fatal("daemon Run remove = false with --rm")
+			}
 			instance := control.Instance{ID: "000000000003", State: control.StateRunning}
 			if err := onEvent(control.RunEvent{Type: "started", Instance: instance}); err != nil {
 				return instance, err
@@ -526,7 +608,7 @@ func TestRunSelectionStopsDaemonInstanceOnCancellation(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		done <- runSelectedConfigsPreferDaemon(
-			ctx, configPath, "", io.Discard, io.Discard, client,
+			ctx, configPath, "", io.Discard, io.Discard, true, client,
 			func(context.Context, []daemon.NamedConfig, *slog.Logger) error {
 				return errors.New("unexpected daemonless execution")
 			},
@@ -645,7 +727,7 @@ func TestManagedCommandHelp(t *testing.T) {
 		command string
 		usage   string
 	}{
-		{command: "run", usage: "Usage: slipway run [--config path] [--name name] [--socket path]"},
+		{command: "run", usage: "Usage: slipway run [--rm] [--config path] [--name name] [--socket path]"},
 		{command: "start", usage: "Usage: slipway start [--config path] [--name name] [--socket path]"},
 		{command: "ps", usage: "Usage: slipway ps [--all] [--socket path]"},
 		{command: "stop", usage: "Usage: slipway stop [--socket path] <id-or-name> [id-or-name ...]"},
@@ -737,7 +819,7 @@ func managedCLI(t *testing.T, args ...string) (code int, stdout, stderr string) 
 type stubRunControlClient struct {
 	socketPath string
 	listErr    error
-	run        func(context.Context, string, string, func(control.RunEvent) error) (control.Instance, error)
+	run        func(context.Context, string, string, bool, func(control.RunEvent) error) (control.Instance, error)
 	stop       func(context.Context, string) (control.Instance, error)
 }
 
@@ -749,15 +831,16 @@ func (client *stubRunControlClient) List(context.Context, bool) ([]control.Insta
 	return nil, client.listErr
 }
 
-func (client *stubRunControlClient) Run(
+func (client *stubRunControlClient) RunWithOptions(
 	ctx context.Context,
 	path, name string,
+	options control.RunOptions,
 	onEvent func(control.RunEvent) error,
 ) (control.Instance, error) {
 	if client.run == nil {
 		return control.Instance{}, errors.New("unexpected daemon Run call")
 	}
-	return client.run(ctx, path, name, onEvent)
+	return client.run(ctx, path, name, options.RemoveOnExit, onEvent)
 }
 
 func (client *stubRunControlClient) Stop(ctx context.Context, selector string) (control.Instance, error) {
