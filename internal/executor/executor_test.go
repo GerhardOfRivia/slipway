@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -157,6 +158,46 @@ func TestLocalPassesUnsafeLookingPathAsOneLiteralArgument(t *testing.T) {
 	}
 	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("shell-like argument was evaluated; marker stat error = %v", err)
+	}
+}
+
+func TestLocalRunsExplicitShellWithExpansionAndLiteralPositionalArgs(t *testing.T) {
+	t.Parallel()
+
+	shell, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skip("sh is not available")
+	}
+	workingDirectory := t.TempDir()
+	for _, name := range []string{"alpha.txt", "two words.txt", "ignored.csv"} {
+		if err := os.WriteFile(filepath.Join(workingDirectory, name), []byte(name), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	marker := filepath.Join(workingDirectory, "must-not-be-created")
+	unsafeArgument := "$(touch " + marker + "); literal *"
+
+	result, err := NewLocal(nil).Execute(context.Background(), Command{
+		Name:       "shell expansion",
+		Program:    shell,
+		WorkingDir: workingDirectory,
+		Env:        map[string]string{"MODE": "batch mode"},
+		Args: []string{
+			"-c",
+			`printf 'mode=%s\n' "$MODE"; printf 'arg=%s\n' "$1"; for path in ./*.txt; do printf 'file=%s\n' "$path"; done`,
+			"slipway-shell",
+			unsafeArgument,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v; stderr = %s", err, result.Stderr)
+	}
+	want := "mode=batch mode\narg=" + unsafeArgument + "\nfile=./alpha.txt\nfile=./two words.txt\n"
+	if result.Stdout != want {
+		t.Fatalf("stdout = %q, want %q", result.Stdout, want)
+	}
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("positional argument was evaluated as shell source; marker stat error = %v", err)
 	}
 }
 

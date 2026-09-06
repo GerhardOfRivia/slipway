@@ -1,0 +1,39 @@
+services:
+  slipwayd:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SLIPWAY_UID: "${SLIPWAY_UID:?Set SLIPWAY_UID in .env}"
+        SLIPWAY_GID: "${SLIPWAY_GID:?Set SLIPWAY_GID in .env}"
+    image: localhost/slipway:local
+    container_name: slipwayd
+    restart: unless-stopped
+    stop_grace_period: 45s
+
+    environment:
+      SLIPWAY_SOCKET: /run/slipway/slipway.sock
+      SLIPWAY_WEB_LISTEN: "0.0.0.0:5280"
+      # Uncomment after placing valid pipeline configs in this directory:
+      # SLIPWAY_CONFIG: "${SLIPWAY_WORKSPACE}/configs"
+
+    working_dir: "${SLIPWAY_WORKSPACE:?Set SLIPWAY_WORKSPACE in .env}"
+
+    ports:
+      # Publish the dashboard on host loopback, not all host interfaces.
+      - "127.0.0.1:5280:5280"
+
+    volumes:
+      # Pre-create this directory as your user, with mode 0700.
+      - type: bind
+        source: "${SLIPWAY_SOCKET_DIR:?Set SLIPWAY_SOCKET_DIR in .env}"
+        target: /run/slipway
+        bind:
+          create_host_path: false
+
+      # Preserve absolute paths for configs submitted by host-side clients.
+      - type: bind
+        source: "${SLIPWAY_WORKSPACE:?Set SLIPWAY_WORKSPACE in .env}"
+        target: "${SLIPWAY_WORKSPACE:?Set SLIPWAY_WORKSPACE in .env}"
+        bind:
+          create_host_path: false

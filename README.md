@@ -78,12 +78,13 @@ open the queue database. Program paths in the display reflect config-relative
 path resolution, reusable `values` are expanded, and job-dependent templates
 such as `{{file}}` remain unexpanded. By default, each invocation is displayed
 as a readable shell-like command line, with spaces and shell syntax safely
-single-quoted. This is only a presentation format: slipway still executes the
-program and argument vector directly, without a shell. `check --raw` selects
-the previous, authoritative representation consisting of a quoted program
-followed by its JSON argument array. Pipeline steps run in numbered order and
-are not shell pipes. Commands with an output file also show their configured
-output path.
+single-quoted. For command and container executors this is only a presentation
+format: slipway executes the program and argument vector directly. A shell
+executor deliberately starts its configured shell, and the display shows its
+exact `-c` invocation. `check --raw` selects the previous, authoritative
+representation consisting of a quoted program followed by its JSON argument
+array. Pipeline steps run in numbered order and are not shell pipes. Commands
+with an output file also show their configured output path.
 
 ## generating pipeline configuration
 
@@ -279,8 +280,8 @@ config. If a numeric job ID exists in multiple databases, select its config
 explicitly:
 
 ```bash
-slipway job --config ~/.local/slipway.d/incoming.yaml 42
-slipway logs --config ~/.local/slipway.d/incoming.yaml 42
+slipway job --config incoming.yaml 42
+slipway logs --config incoming.yaml 42
 ```
 
 Inspection commands open existing queue databases read-only; they report a
@@ -343,17 +344,52 @@ watches:
           SLIPWAY_INPUT: "{{basename}}"
 ```
 
-Durations use Go syntax such as `250ms`, `10s`, or `15m`. The defaults are one
+Durations use Go syntax such as `250ms`, `10s`, `15m`, `2hr`. The defaults are one
 worker per CPU, a `10s` retry delay, a `1s` settle period, and `./slipway.db`.
 `max_retries` counts retries after the first attempt.
 
-Each pipeline entry may set `executor` to `command`, `docker`, `podman`, or
-`apptainer`. Omitting `executor` is equivalent to `executor: command`. Command
-entries require `program`, which names the executable to run. The other
-executor kinds run their same-named CLI from `PATH` by default; an optional
-`program` overrides that binary, for example to select `/usr/local/bin/podman`.
-For a container entry, `program` always names the host-side runtime CLI, not the
-program inside the container.
+Each pipeline entry may set `executor` to `command`, `shell`, `docker`, `podman`,
+or `apptainer`. Omitting `executor` is equivalent to `executor: command`.
+Command entries require `program`, which names the executable to run. Shell
+entries use `/bin/sh` by default. The container executor kinds run their
+same-named CLI from `PATH` by default. An optional `program` overrides the
+default binary, for example to select `/bin/bash` for a shell entry or
+`/usr/local/bin/podman` for a container entry. For a container entry, `program`
+always names the host-side runtime CLI, not the program inside the container.
+
+Shell entries use `command` as shell source and support expansion, pipelines,
+redirection, and other syntax provided by the selected shell:
+
+```yaml
+      - name: process-sidecars
+        executor: shell
+        command: |
+          set -eu
+          for file in "$1"/*.csv; do
+            [ -e "$file" ] || continue
+            process-file -- "$file"
+          done
+        command_args:
+          - "{{dir}}"
+```
+
+The host invocation is exactly:
+
+```text
+/bin/sh -c <command> <step-name> <command_args...>
+```
+
+The step name therefore becomes shell `$0`, the first `command_args` entry is
+`$1`, and all configured arguments are available through `"$@"`. slipway does
+not implicitly enable shell options such as `errexit`; put options such as
+`set -eu` in the source when required.
+
+Config-local `values` may be expanded in shell source, but built-in per-job
+templates such as `{{file}}`, `{{dir}}`, and `{{job_id}}` are forbidden there.
+Pass job-dependent data through `command_args` or host-side `env`, then quote
+the corresponding positional parameter or environment variable in the shell
+source. This keeps a watched filename containing quotes, semicolons, `$()`, or
+other shell syntax as data rather than executable source.
 
 Container entries can describe the invocation with structured fields:
 
@@ -511,9 +547,11 @@ may appear in process arguments, environment values, logs, and persisted
 command history.
 
 The following templates are expanded independently in ordinary command
-arguments, structured container images, mount sources, targets, and options,
-container arguments, container commands and command arguments, working
-directories, output paths, and host or container environment values:
+arguments, shell `command_args`, structured container images, mount sources,
+targets, and options, container arguments, container commands and command
+arguments, working directories, output paths, and host or container environment
+values. Shell source is the exception described above and cannot contain these
+per-job templates:
 
 | Template | Value |
 | --- | --- |
@@ -524,16 +562,18 @@ directories, output paths, and host or container environment values:
 | `{{ext}}` | Final extension, including the dot |
 | `{{job_id}}` | SQLite job ID |
 
-slipway passes the selected executable and argument slice directly to Go's
-process execution API; it never constructs a shell command. This applies both
-to ordinary commands and to the Docker, Podman, and Apptainer CLIs. Spaces,
-wildcard characters, semicolons, `$()`, and other shell-looking text in
-filenames remain literal argument data when handed to the selected executable.
-Host-side `env` entries override the runner process environment for that command.
-Structured Apptainer invocations include `--no-eval` to disable its normal
-startup evaluation. Raw Apptainer `args` remain unchanged, so add `--no-eval`
-there when needed. A container image's own entry point or runscript may still
-interpret the arguments it receives.
+For command and container executors, slipway passes the selected executable and
+argument slice directly to Go's process execution API; it never constructs a
+shell command. Spaces, wildcard characters, semicolons, `$()`, and other
+shell-looking text in filenames remain literal argument data when handed to the
+selected executable. The shell executor is an explicit exception: its
+configured `command` is interpreted by the selected shell, while expanded
+`command_args` remain separate positional arguments. Host-side `env` entries
+override the runner process environment for that command. Structured Apptainer
+invocations include `--no-eval` to disable its normal startup evaluation. Raw
+Apptainer `args` remain unchanged, so add `--no-eval` there when needed. A
+container image's own entry point or runscript may still interpret the arguments
+it receives.
 
 Stopping or timing out a Docker or Podman step terminates the runtime CLI
 process group, but a container managed by a separate runtime daemon may outlive
@@ -598,6 +638,162 @@ new session or process group is outside that guarantee. Output-pipe cleanup is
 time-bounded so an escaped descendant cannot indefinitely block shutdown merely
 by retaining an inherited descriptor. SIGINT and SIGTERM stop foreground runs
 and every daemon-managed instance gracefully.
+
+
+## container
+
+Run as your regular, non-root user from the Slipway repository root.
+The UID/GID must be nonzero and not conflict with existing base-image accounts.
+For standard Docker without user-namespace remapping:
+
+```bash
+docker build --pull \
+  --build-arg SLIPWAY_UID="$(id -u)" \
+  --build-arg SLIPWAY_GID="$(id -g)" \
+  --build-arg VERSION="$(git describe --tags --always --dirty)" \
+  -t localhost/slipway:local .
+```
+
+For Podman, keep Docker image format so that the image retains HEALTHCHECK:
+
+```bash
+podman build --pull=always --format docker \
+  --build-arg SLIPWAY_UID="$(id -u)" \
+  --build-arg SLIPWAY_GID="$(id -g)" \
+  --build-arg VERSION="$(git describe --tags --always --dirty)" \
+  -t localhost/slipway:local .
+```
+
+Base-image tags follow patch updates. For controlled release builds, override
+NODE_IMAGE, GO_IMAGE, and RUNTIME_IMAGE with approved digest-pinned image references.
+The build compiles for the selected image platform; it does not configure a
+cross-compilation or emulation environment for you.
+
+### prepare the socket and workspace
+
+Most users can use `XDG_RUNTIME_DIR` this will resolve to `/run/user/1000`
+
+```bash
+SOCKET_DIR="${XDG_RUNTIME_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}}/slipway"
+WORKSPACE="$HOME/slipway-work"
+
+install -d -m 0700 "$SOCKET_DIR"
+mkdir -p "$WORKSPACE/configs" "$WORKSPACE/incoming" "$WORKSPACE/state"
+```
+
+Do not run another daemon against this socket. Existing socket/lock files must
+belong to the same user. The mounted directory must be owned by the daemon's
+mapped UID and have mode 0700; image-layer ownership cannot fix a bind mount.
+
+### run with Docker
+
+```bash
+docker run -d \
+  --name slipwayd \
+  --restart unless-stopped \
+  --stop-timeout 45 \
+  --mount "type=bind,src=$SOCKET_DIR,dst=/run/slipway" \
+  --mount "type=bind,src=$WORKSPACE,dst=$WORKSPACE" \
+  --workdir "$WORKSPACE" \
+  localhost/slipway:local
+```
+
+### run with rootless Podman instead
+
+```bash
+podman run -d \
+  --name slipwayd \
+  --restart unless-stopped \
+  --stop-timeout 45 \
+  --userns=keep-id \
+  --mount "type=bind,src=$SOCKET_DIR,dst=/run/slipway" \
+  --mount "type=bind,src=$WORKSPACE,dst=$WORKSPACE" \
+  --workdir "$WORKSPACE" \
+  localhost/slipway:local
+```
+
+On SELinux-enforcing systems, replace the two --mount options with:
+
+```bash
+-v "$SOCKET_DIR:/run/slipway:z" \
+-v "$WORKSPACE:$WORKSPACE:z"
+```
+
+Only relabel these dedicated directories, not your whole home/runtime directory.
+The shared `:z` label is appropriate when multiple containers share the mounts.
+SELinux socket-connection policy can require additional configuration even after
+filesystem permissions and labels are correct. Do not globally disable SELinux
+as a workaround. Rootless restart-at-boot requires separate service/session setup.
+
+### connect a host-side client
+
+```bash
+export SLIPWAY_SOCKET="$SOCKET_DIR/slipway.sock"
+slipway ps
+
+# Once this config exists and its paths/executables are usable in the container:
+slipway start --config "$WORKSPACE/configs/incoming.yaml" --name incoming
+
+# The image includes a client for diagnostics too:
+docker exec slipwayd slipway ps
+docker logs slipwayd
+```
+
+Use `podman exec` and `podman logs` for a Podman-managed container.
+
+The workspace is mounted at the same absolute path on both sides because
+`slipway start` sends config paths to the daemon, not the YAML contents. Put queue
+databases in the mounted workspace too. For a config in `configs/`, for example:
+
+```yaml
+database:
+  path: ../state/incoming.db
+```
+
+Use a unique database path for each config. Persist the complete database
+directory so SQLite companion files also remain available.
+
+The health check validates control-API connectivity, not successful pipeline
+processing. Override the socket through SLIPWAY_SOCKET rather than only through
+`--socket`, so both daemon and health-check client use the new address.
+
+### restart behavior
+
+Instances submitted interactively with `slipway start` are not automatically
+restored after the daemon exits. To bootstrap a nonempty config directory at
+every daemon start, add this option BEFORE the image name in the run command:
+
+```bash
+--env "SLIPWAY_CONFIG=$WORKSPACE/configs"
+```
+
+Alternatively append `--config "$WORKSPACE/configs"` after the image name.
+Do not resubmit those already bootstrapped configs through `slipway start`.
+Persisting SQLite history alone does not persist the in-memory instance registry.
+
+### optional dashboard
+
+To enable the embedded dashboard, add these options BEFORE the image name:
+
+```bash
+--env SLIPWAY_WEB_LISTEN=0.0.0.0:5280 \
+--publish 127.0.0.1:5280:5280
+```
+
+Open `http://127.0.0.1:5280` and read the access token on the host:
+
+```bash
+# Docker
+docker exec slipwayd cat /run/slipway/slipway.sock.web-token
+
+# Docker Compose
+docker compose exec -T slipwayd cat /run/slipway/slipway.sock.web-token
+```
+
+This binds the application to all interfaces INSIDE the container but publishes
+its port only on the host loopback address. Other containers with network access
+to this container may still reach it. Keep the bearer token private, and do not
+expose its unencrypted HTTP listener to an untrusted network.
 
 ## systemd
 
@@ -677,10 +873,11 @@ per-user daemon is recommended for interactive and user-owned workloads.
 - `internal/cli`: command parsing for the `slipway` client and `slipwayd` daemon
 
 The worker depends on the executor interface rather than the local
-implementation. Container executor kinds select their runtime CLI and reuse
-the same host-process capture and history mechanics; the CLI's exit remains the
-step-completion boundary. The interface leaves room for future backends such as
-Slurm or Flux.
+implementation. Shell steps lower their source and positional arguments into an
+explicit shell invocation, while container executor kinds select their runtime
+CLI. Both reuse the same host-process capture and history mechanics; the host
+process's exit remains the step-completion boundary. The interface leaves room
+for future backends such as Slurm or Flux.
 
 ## development
 

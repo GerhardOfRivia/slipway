@@ -143,11 +143,12 @@ func NewLocal(logger *slog.Logger) *Local {
 	return &Local{logger: logger}
 }
 
-// Execute runs program with args directly through os/exec. It does not invoke a
-// shell, so spaces and shell metacharacters remain literal data. Captured
-// stdout and stderr are independently bounded to protect daemon memory and the
-// persistent command history. When Output is set, complete stdout is also
-// streamed to that file.
+// Execute runs program with args directly through os/exec. It does not
+// implicitly invoke a shell or interpret Args, so spaces and shell
+// metacharacters remain literal data unless Program deliberately names a shell.
+// Captured stdout and stderr are independently bounded to protect daemon memory
+// and the persistent command history. When Output is set, complete stdout is
+// also streamed to that file.
 func (local *Local) Execute(ctx context.Context, command Command) (Result, error) {
 	result := Result{ExitCode: -1}
 	if command.Program == "" {

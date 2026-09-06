@@ -397,14 +397,17 @@ func commandFromConfig(command config.CommandConfig) executor.Command {
 	}
 }
 
-// expandConfiguredCommand expands structured container values before
-// ExecutionArgs serializes them. In particular, this lets mount paths be
-// escaped after a job path containing CSV delimiters has been substituted.
+// expandConfiguredCommand expands per-job values before ExecutionArgs
+// serializes them. Shell source is deliberately excluded: job-derived values
+// reach a shell through command_args or env, where they remain data rather than
+// becoming executable syntax.
 func expandConfiguredCommand(command config.CommandConfig, expander executor.Expander) config.CommandConfig {
 	command.Args = expandConfiguredStrings(command.Args, expander)
 	command.Image = expander.String(command.Image)
 	command.ContainerArgs = expandConfiguredStrings(command.ContainerArgs, expander)
-	command.Command = expander.String(command.Command)
+	if command.Executor != config.ExecutorShell {
+		command.Command = expander.String(command.Command)
+	}
 	command.CommandArgs = expandConfiguredStrings(command.CommandArgs, expander)
 	command.WorkingDir = expander.String(command.WorkingDir)
 	command.Output = expander.String(command.Output)

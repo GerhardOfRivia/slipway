@@ -198,6 +198,53 @@ Watch: mixed
 	}
 }
 
+func TestCheckDisplaysShellExecutorLowering(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	configPath := filepath.Join(directory, "slipway.yaml")
+	configuration := `
+values:
+  tool: process-file
+watches:
+  - name: incoming
+    path: .
+    pipeline:
+      - name: process-sidecars
+        executor: shell
+        command: 'for file in "$1"/*.csv; do {{tool}} -- "$file"; done'
+        command_args: ["{{dir}}", "literal; $(still data)"]
+`
+	if err := os.WriteFile(configPath, []byte(configuration), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"check", "--config", configPath}, &stdout, &stderr); code != 0 {
+		t.Fatalf("Run(check) code = %d, stderr = %q", code, stderr.String())
+	}
+	want := fmt.Sprintf(`Config: %s
+Watch: incoming
+  1. process-sidecars [shell]: /bin/sh -c 'for file in "$1"/*.csv; do process-file -- "$file"; done' process-sidecars '{{dir}}' 'literal; $(still data)'
+`, configPath)
+	if got := stdout.String(); got != want {
+		t.Fatalf("Run(check) output = %q, want %q", got, want)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"check", "--raw", "--config", configPath}, &stdout, &stderr); code != 0 {
+		t.Fatalf("Run(check --raw) code = %d, stderr = %q", code, stderr.String())
+	}
+	rawWant := fmt.Sprintf(`Config: %s
+Watch: incoming
+  1. process-sidecars [shell]: "/bin/sh" ["-c","for file in \"$1\"/*.csv; do process-file -- \"$file\"; done","process-sidecars","{{dir}}","literal; $(still data)"]
+`, configPath)
+	if got := stdout.String(); got != rawWant {
+		t.Fatalf("Run(check --raw) output = %q, want %q", got, rawWant)
+	}
+}
+
 func TestCheckDisplaysConfigDirectoryInDiscoveryOrder(t *testing.T) {
 	t.Parallel()
 

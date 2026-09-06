@@ -208,6 +208,160 @@ watches:
 	}
 }
 
+func TestLoadShellExecutor(t *testing.T) {
+	filename := writeConfig(t, `
+values:
+  print_command: printf
+watches:
+  - name: incoming
+    path: .
+    pipeline:
+      - name: expand-files
+        executor: shell
+        command: '{{print_command}} "%s\n" "$1"/*.csv'
+        command_args:
+          - "{{dir}}"
+          - "literal; $(not-executed)"
+        env:
+          INPUT_FILE: "{{file}}"
+`)
+
+	cfg, err := Load(filename)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	command := cfg.Watches[0].Pipeline[0]
+	if command.Executor != ExecutorShell {
+		t.Fatalf("executor = %q, want shell", command.Executor)
+	}
+	if command.Program != "/bin/sh" {
+		t.Fatalf("program = %q, want /bin/sh", command.Program)
+	}
+	if command.Command != `printf "%s\n" "$1"/*.csv` {
+		t.Fatalf("command = %q", command.Command)
+	}
+	wantArgs := []string{
+		"-c",
+		`printf "%s\n" "$1"/*.csv`,
+		"expand-files",
+		"{{dir}}",
+		"literal; $(not-executed)",
+	}
+	if got := command.ExecutionArgs(); !slices.Equal(got, wantArgs) {
+		t.Fatalf("ExecutionArgs() = %#v, want %#v", got, wantArgs)
+	}
+}
+
+func TestLoadShellExecutorProgramOverride(t *testing.T) {
+	filename := writeConfig(t, `
+watches:
+  - name: incoming
+    path: .
+    pipeline:
+      - name: bash-script
+        executor: shell
+        program: /bin/bash
+        command: printf ok
+`)
+
+	cfg, err := Load(filename)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got := cfg.Watches[0].Pipeline[0].Program; got != "/bin/bash" {
+		t.Fatalf("program = %q, want /bin/bash", got)
+	}
+}
+
+func TestLoadRejectsInvalidShellConfiguration(t *testing.T) {
+	tests := []struct {
+		name    string
+		fields  string
+		wantErr string
+	}{
+		{name: "missing command", wantErr: ".command is required and must not be blank"},
+		{name: "blank command", fields: "        command: '   '\n", wantErr: ".command is required and must not be blank"},
+		{name: "raw args", fields: "        command: printf\n        args: [value]\n", wantErr: ".args are not supported"},
+		{name: "explicit empty raw args", fields: "        command: printf\n        args: []\n", wantErr: ".args are not supported"},
+		{name: "image", fields: "        command: printf\n        image: example/image\n", wantErr: ".container fields are not supported"},
+		{name: "explicit empty mounts", fields: "        command: printf\n        mounts: []\n", wantErr: ".container fields are not supported"},
+		{name: "explicit empty container env", fields: "        command: printf\n        container_env: {}\n", wantErr: ".container fields are not supported"},
+		{name: "explicit empty container args", fields: "        command: printf\n        container_args: []\n", wantErr: ".container fields are not supported"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := Load(writeConfig(t, `
+watches:
+  - name: incoming
+    path: .
+    pipeline:
+      - name: run
+        executor: shell
+`+test.fields))
+			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("Load() error = %v, want error containing %q", err, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestLoadRejectsPerJobTemplatesInShellCommand(t *testing.T) {
+	for _, name := range []string{"file", "dir", "basename", "stem", "ext", "job_id"} {
+		t.Run(name, func(t *testing.T) {
+			_, err := Load(writeConfig(t, `
+watches:
+  - name: incoming
+    path: .
+    pipeline:
+      - name: run
+        executor: shell
+        command: 'printf "{{`+name+`}}"'
+`))
+			for _, want := range []string{"{{" + name + "}}", "command_args", "env"} {
+				if err == nil || !strings.Contains(err.Error(), want) {
+					t.Fatalf("Load() error = %v, want error containing %q", err, want)
+				}
+			}
+		})
+	}
+}
+
+func TestLoadRejectsPerJobTemplateExpandedFromReusableValueInShellCommand(t *testing.T) {
+	_, err := Load(writeConfig(t, `
+values:
+  shell_source: 'printf "%s\n" "{{file}}"'
+watches:
+  - name: incoming
+    path: .
+    pipeline:
+      - name: run
+        executor: shell
+        command: "{{shell_source}}"
+`))
+	if err == nil || !strings.Contains(err.Error(), "{{file}}") {
+		t.Fatalf("Load() error = %v, want expanded per-job-template error", err)
+	}
+}
+
+func TestLoadAllowsPerJobTemplatesInShellArgumentsAndEnvironment(t *testing.T) {
+	filename := writeConfig(t, `
+watches:
+  - name: incoming
+    path: .
+    pipeline:
+      - name: run
+        executor: shell
+        command: 'printf "%s %s\n" "$1" "$INPUT_NAME"'
+        command_args: ["{{file}}"]
+        env:
+          INPUT_NAME: "{{basename}}"
+`)
+	if _, err := Load(filename); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+}
+
 func TestLoadStructuredContainerExecutor(t *testing.T) {
 	filename := writeConfig(t, `
 watches:

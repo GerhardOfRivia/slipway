@@ -31,6 +31,20 @@ build:
 	mkdir -p $(dir $(SLIPWAYD_OUTPUT))
 	GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(LDFLAGS) -o $(SLIPWAYD_OUTPUT) ./cmd/slipwayd
 
+build-docker:
+	docker build --pull \
+	--build-arg SLIPWAY_UID="$(id -u)" \
+	--build-arg SLIPWAY_GID="$(id -g)" \
+	--build-arg VERSION="$(git describe --tags --always --dirty)" \
+	-t localhost/slipway:local .
+
+build-podman:
+	podman build --pull=always --format docker \
+	--build-arg SLIPWAY_UID="$(id -u)" \
+	--build-arg SLIPWAY_GID="$(id -g)" \
+	--build-arg VERSION="$(git describe --tags --always --dirty)" \
+	-t localhost/slipway:local .
+
 web:
 	# npm ci && npm run build
 	docker run --rm --user $$(id -u):$$(id -g) --mount type=bind,src=$(CURDIR),dst=/workspace -w /workspace/web node:22-bookworm-slim /bin/sh -lc 'npm ci && npm run build'

@@ -24,11 +24,13 @@ const (
 
 // ExecutorType selects how a pipeline step's host-side executable is chosen.
 // Container executor arguments are passed directly to the selected runtime CLI
-// so slipway does not need to duplicate each runtime's option surface.
+// so slipway does not need to duplicate each runtime's option surface. The
+// shell executor invokes its program with a script and positional arguments.
 type ExecutorType string
 
 const (
 	ExecutorCommand   ExecutorType = "command"
+	ExecutorShell     ExecutorType = "shell"
 	ExecutorDocker    ExecutorType = "docker"
 	ExecutorPodman    ExecutorType = "podman"
 	ExecutorApptainer ExecutorType = "apptainer"
@@ -187,8 +189,9 @@ func validateMountMergeFields(node *yaml.Node, visited map[*yaml.Node]bool) erro
 }
 
 // CommandConfig describes one process invocation. Program and Args are kept
-// separate so callers never need to construct a shell command string. The
-// container fields provide a structured alternative to raw runtime CLI args.
+// separate for command executors. Shell executors use Command as source and
+// CommandArgs as positional arguments. The container fields provide a
+// structured alternative to raw runtime CLI args.
 type CommandConfig struct {
 	Name          string            `yaml:"name"`
 	Executor      ExecutorType      `yaml:"executor"`
@@ -207,13 +210,21 @@ type CommandConfig struct {
 
 	structuredContainer bool
 	containerCommandSet bool
+	rawArgsSet          bool
+	containerFieldsSet  bool
 }
 
 // ExecutionArgs returns the actual host-process arguments for a pipeline step.
+// Shell entries are translated to program -c command step-name command_args,
+// making the step name $0 and keeping per-job values in positional arguments.
 // Legacy container entries retain their raw Args. Structured entries are
 // translated into a deterministic runtime CLI invocation, with every value
 // kept as a separate process argument.
 func (command CommandConfig) ExecutionArgs() []string {
+	if command.Executor == ExecutorShell {
+		args := []string{"-c", command.Command, command.Name}
+		return append(args, command.CommandArgs...)
+	}
 	if !command.usesStructuredContainer() {
 		return append([]string(nil), command.Args...)
 	}
@@ -291,13 +302,51 @@ func (command CommandConfig) usesStructuredContainer() bool {
 		len(command.CommandArgs) > 0
 }
 
+func (command CommandConfig) usesContainerFields() bool {
+	return command.containerFieldsSet ||
+		command.Image != "" ||
+		len(command.Mounts) > 0 ||
+		len(command.ContainerEnv) > 0 ||
+		len(command.ContainerArgs) > 0
+}
+
 // ValidateExecution checks values that may have changed during per-job
 // template expansion. Load performs the same checks on the configured values.
 func (command CommandConfig) ValidateExecution() error {
+	if command.Executor == ExecutorShell {
+		return command.validateShell()
+	}
 	if !command.usesStructuredContainer() {
 		return nil
 	}
 	return command.validateStructuredContainer()
+}
+
+func (command CommandConfig) validateShell() error {
+	if command.rawArgsSet || len(command.Args) > 0 {
+		return errors.New("args are not supported by the shell executor; use command_args for positional arguments")
+	}
+	if command.usesContainerFields() {
+		return errors.New("container fields are not supported by the shell executor")
+	}
+	if strings.TrimSpace(command.Command) == "" {
+		return errors.New("command is required and must not be blank for the shell executor")
+	}
+	if template := builtInPerJobTemplate(command.Command); template != "" {
+		return fmt.Errorf("command must not contain the built-in per-job template %s; pass per-job values through command_args or env", template)
+	}
+	return nil
+}
+
+func builtInPerJobTemplate(value string) string {
+	var first string
+	for name := range reservedTemplateValueNames {
+		template := "{{" + name + "}}"
+		if strings.Contains(value, template) && (first == "" || template < first) {
+			first = template
+		}
+	}
+	return first
 }
 
 func (command CommandConfig) validateStructuredContainer() error {
@@ -388,7 +437,7 @@ func Load(filename string) (*Config, error) {
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
 		return nil, fmt.Errorf("inspect config fields: %w", err)
 	}
-	if err := markContainerFieldPresence(&cfg, file); err != nil {
+	if err := markCommandFieldPresence(&cfg, file); err != nil {
 		return nil, fmt.Errorf("inspect config fields: %w", err)
 	}
 
@@ -402,11 +451,11 @@ func Load(filename string) (*Config, error) {
 	return &cfg, nil
 }
 
-// markContainerFieldPresence distinguishes omitted structured fields from
-// explicitly empty ones. That both makes empty declarations fail validation
-// and preserves structured mode when a per-job template later expands to an
-// empty string.
-func markContainerFieldPresence(cfg *Config, source io.Reader) error {
+// markCommandFieldPresence distinguishes omitted executor-specific fields
+// from explicitly empty ones. That both makes empty declarations fail
+// validation and preserves structured container mode when a per-job template
+// later expands to an empty string.
+func markCommandFieldPresence(cfg *Config, source io.Reader) error {
 	var fields struct {
 		Watches []struct {
 			Pipeline []map[string]any `yaml:"pipeline"`
@@ -426,6 +475,12 @@ func markContainerFieldPresence(cfg *Config, source io.Reader) error {
 		"command",
 		"command_args",
 	}
+	containerFields := [...]string{
+		"image",
+		"mounts",
+		"container_env",
+		"container_args",
+	}
 	for watchIndex := range cfg.Watches {
 		if len(fields.Watches[watchIndex].Pipeline) != len(cfg.Watches[watchIndex].Pipeline) {
 			return fmt.Errorf("decoded pipeline count changed for watches[%d] while inspecting fields", watchIndex)
@@ -433,9 +488,16 @@ func markContainerFieldPresence(cfg *Config, source io.Reader) error {
 		for commandIndex := range cfg.Watches[watchIndex].Pipeline {
 			command := &cfg.Watches[watchIndex].Pipeline[commandIndex]
 			present := fields.Watches[watchIndex].Pipeline[commandIndex]
+			_, command.rawArgsSet = present["args"]
 			for _, name := range structuredFields {
 				if _, exists := present[name]; exists {
 					command.structuredContainer = true
+					break
+				}
+			}
+			for _, name := range containerFields {
+				if _, exists := present[name]; exists {
+					command.containerFieldsSet = true
 					break
 				}
 			}
@@ -542,7 +604,7 @@ func (c *Config) Validate() error {
 				return fmt.Errorf("%s.name is required", commandPrefix)
 			}
 			if !command.Executor.valid() {
-				return fmt.Errorf("%s.executor %q is invalid; must be one of command, docker, podman, or apptainer", commandPrefix, command.Executor)
+				return fmt.Errorf("%s.executor %q is invalid; must be one of command, shell, docker, podman, or apptainer", commandPrefix, command.Executor)
 			}
 			if strings.TrimSpace(command.Program) == "" {
 				return fmt.Errorf("%s.program is required", commandPrefix)
@@ -552,10 +614,19 @@ func (c *Config) Validate() error {
 			if command.Command != "" {
 				command.containerCommandSet = true
 			}
-			if command.Executor == ExecutorCommand && structuredContainer {
-				return fmt.Errorf("%s container fields require a docker, podman, or apptainer executor", commandPrefix)
-			}
-			if command.Executor != ExecutorCommand && structuredContainer {
+			switch command.Executor {
+			case ExecutorCommand:
+				if structuredContainer {
+					return fmt.Errorf("%s container fields require a docker, podman, or apptainer executor", commandPrefix)
+				}
+			case ExecutorShell:
+				if err := command.validateShell(); err != nil {
+					return fmt.Errorf("%s.%w", commandPrefix, err)
+				}
+			default:
+				if !structuredContainer {
+					break
+				}
 				if err := command.validateStructuredContainer(); err != nil {
 					return fmt.Errorf("%s.%w", commandPrefix, err)
 				}
@@ -575,7 +646,7 @@ func (c *Config) Validate() error {
 
 func (executor ExecutorType) valid() bool {
 	switch executor {
-	case ExecutorCommand, ExecutorDocker, ExecutorPodman, ExecutorApptainer:
+	case ExecutorCommand, ExecutorShell, ExecutorDocker, ExecutorPodman, ExecutorApptainer:
 		return true
 	default:
 		return false
@@ -584,6 +655,8 @@ func (executor ExecutorType) valid() bool {
 
 func (executor ExecutorType) defaultProgram() string {
 	switch executor {
+	case ExecutorShell:
+		return "/bin/sh"
 	case ExecutorDocker, ExecutorPodman, ExecutorApptainer:
 		return string(executor)
 	default:

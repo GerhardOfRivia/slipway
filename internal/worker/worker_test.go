@@ -83,6 +83,59 @@ func TestProcessJobRunsCommandsSequentiallyAndPersistsHistory(t *testing.T) {
 	}
 }
 
+func TestProcessJobPassesShellDataAsArgumentsAndEnvironment(t *testing.T) {
+	t.Parallel()
+
+	const source = `for file in "$1"/*.csv; do
+	printf '%s\n' "$file" "$INPUT"
+done`
+	store := &recordingStore{}
+	runner := &recordingExecutor{}
+	resolver := NewConfigResolver([]config.WatchConfig{{
+		Name: "incoming",
+		Pipeline: []config.CommandConfig{{
+			Name:        "expand-files",
+			Executor:    config.ExecutorShell,
+			Program:     "/bin/sh",
+			Command:     source,
+			CommandArgs: []string{"{{file}}", "--label={{basename}}"},
+			Env: map[string]string{
+				"INPUT": "{{file}}",
+				"JOB":   "{{job_id}}",
+			},
+		}},
+	}})
+	pool, err := New(store, resolver, runner, Options{Workers: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	job := &queue.Job{
+		ID:        42,
+		RunID:     7,
+		WatchName: "incoming",
+		Path:      `/drop box/report'; touch SHOULD_NOT_RUN; $(printf hacked); #.csv`,
+	}
+
+	if err := pool.processJob(context.Background(), job); err != nil {
+		t.Fatalf("processJob() error = %v", err)
+	}
+
+	wantArgs := []string{"-c", source, "expand-files", job.Path, "--label=" + filepath.Base(job.Path)}
+	wantEnv := map[string]string{"INPUT": job.Path, "JOB": "42"}
+	if len(runner.commands) != 1 {
+		t.Fatalf("executed commands = %d, want 1", len(runner.commands))
+	}
+	if got := runner.commands[0]; got.Program != "/bin/sh" || !reflect.DeepEqual(got.Args, wantArgs) || !reflect.DeepEqual(got.Env, wantEnv) {
+		t.Errorf("executed shell command = %#v, want program %q args %#v env %#v", got, "/bin/sh", wantArgs, wantEnv)
+	}
+	if len(store.started) != 1 {
+		t.Fatalf("history starts = %d, want 1", len(store.started))
+	}
+	if got := store.started[0]; got.Program != "/bin/sh" || !reflect.DeepEqual(got.Args, wantArgs) || !reflect.DeepEqual(got.Env, []string{"INPUT=" + job.Path, "JOB=42"}) {
+		t.Errorf("persisted shell command = %#v, want program %q args %#v env %#v", got, "/bin/sh", wantArgs, []string{"INPUT=" + job.Path, "JOB=42"})
+	}
+}
+
 func TestProcessJobCombinesConfiguredValuesAndJobTemplates(t *testing.T) {
 	t.Parallel()
 
