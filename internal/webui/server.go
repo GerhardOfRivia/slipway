@@ -45,7 +45,8 @@ type Server struct {
 
 // NewServer acquires address immediately and constructs a web server. The
 // address must contain an explicit loopback or wildcard host and TCP port.
-func NewServer(address, tokenPath string, manager *control.Manager, logger *slog.Logger) (*Server, error) {
+// version is the running slipwayd build version displayed by the dashboard.
+func NewServer(address, tokenPath, version string, manager *control.Manager, logger *slog.Logger) (*Server, error) {
 	if manager == nil {
 		return nil, errors.New("webui: manager is required")
 	}
@@ -79,7 +80,7 @@ func NewServer(address, tokenPath string, manager *control.Manager, logger *slog
 		_ = listener.Close()
 		return nil, err
 	}
-	handler, err := newHandlerForListener(manager, logger, token, wildcard)
+	handler, err := newHandlerForListener(manager, logger, token, version, wildcard)
 	if err != nil {
 		_ = listener.Close()
 		removeAccessToken(tokenPath, token)
@@ -262,11 +263,11 @@ func (server *Server) Close() error {
 	return server.closeErr
 }
 
-func newHandler(manager *control.Manager, logger *slog.Logger, token string) (http.Handler, error) {
-	return newHandlerForListener(manager, logger, token, false)
+func newHandler(manager *control.Manager, logger *slog.Logger, token, version string) (http.Handler, error) {
+	return newHandlerForListener(manager, logger, token, version, false)
 }
 
-func newHandlerForListener(manager *control.Manager, logger *slog.Logger, token string, allowRemoteIPHosts bool) (http.Handler, error) {
+func newHandlerForListener(manager *control.Manager, logger *slog.Logger, token, version string, allowRemoteIPHosts bool) (http.Handler, error) {
 	dist, err := fs.Sub(embeddedAssets, "dist")
 	if err != nil {
 		return nil, fmt.Errorf("webui: open embedded assets: %w", err)
@@ -276,9 +277,10 @@ func newHandlerForListener(manager *control.Manager, logger *slog.Logger, token 
 		return nil, fmt.Errorf("webui: read embedded index: %w", err)
 	}
 	files := http.FileServer(http.FS(dist))
-	api := apiServer{manager: manager, logger: logger}
+	api := apiServer{manager: manager, logger: logger, version: version}
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/info", api.handleInfo)
 	mux.HandleFunc("GET /api/v1/queues", api.handleQueues)
 	mux.HandleFunc("GET /api/v1/queues/{queueID}/jobs", api.handleJobs)
 	mux.HandleFunc("GET /api/v1/queues/{queueID}/jobs/{jobID}", api.handleJob)

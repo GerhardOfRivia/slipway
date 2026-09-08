@@ -242,10 +242,11 @@ code, pre, .eyebrow, .status, .section-label, .metric span, .update-block, th, .
   border-bottom: 1px solid var(--chrome-border);
   backdrop-filter: blur(12px);
 }
-.brand-lockup { display: flex; align-items: center; gap: 12px; }
-.brand-lockup > div:last-child { display: flex; flex-direction: column; gap: 1px; }
+.brand-lockup { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.brand-lockup > div:last-child { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .brand-lockup strong { font-size: 15px; letter-spacing: .02em; }
 .brand-lockup span { color: var(--chrome-muted); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
+.brand-lockup .daemon-version { letter-spacing: 0; text-transform: none; overflow-wrap: anywhere; }
 .brand-mark {
   width: 93px;
   height: 62px;
@@ -254,7 +255,7 @@ code, pre, .eyebrow, .status, .section-label, .metric span, .update-block, th, .
   border: 2px solid var(--accent-outline);
   box-shadow: 5px 5px 0 var(--accent-outline);
 }
-.brand-mark-small { width: 57px; height: 38px; border-width: 0; box-shadow: none; }
+.brand-mark-small { width: 57px; height: 38px; flex-shrink: 0; border-width: 0; box-shadow: none; }
 .topnav { align-self: stretch; display: flex; }
 .topnav button {
   position: relative;
@@ -470,9 +471,8 @@ dd { margin: 0; overflow: hidden; font-size: 11px; text-overflow: ellipsis; whit
 }
 
 @media (max-width: 640px) {
-  .topbar { height: 62px; }
+  .topbar { min-height: 62px; height: auto; padding-top: 10px; padding-bottom: 10px; gap: 12px; }
   .topbar-actions { gap: 10px; }
-  .brand-lockup span { display: none; }
   .brand-mark-small { width: 51px; height: 34px; }
   .theme-control > span { display: none; }
   .auth-theme-control { top: 14px; right: 14px; }

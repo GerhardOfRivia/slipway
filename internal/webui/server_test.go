@@ -34,7 +34,7 @@ func TestServerAllowsWildcardWithWarningAndManagesPrivateToken(t *testing.T) {
 	tokenPath := filepath.Join(tokenDirectory, "web.token")
 	var wildcardLogs bytes.Buffer
 	wildcardLogger := slog.New(slog.NewTextHandler(&wildcardLogs, nil))
-	wildcardServer, err := NewServer("0.0.0.0:0", tokenPath, manager, wildcardLogger)
+	wildcardServer, err := NewServer("0.0.0.0:0", tokenPath, "dev", manager, wildcardLogger)
 	if err != nil {
 		t.Fatalf("NewServer wildcard: %v", err)
 	}
@@ -59,11 +59,11 @@ func TestServerAllowsWildcardWithWarningAndManagesPrivateToken(t *testing.T) {
 	if err := wildcardServer.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewServer("192.0.2.25:0", tokenPath, manager, testLogger()); err == nil {
+	if _, err := NewServer("192.0.2.25:0", tokenPath, "dev", manager, testLogger()); err == nil {
 		t.Fatal("NewServer accepted a concrete non-loopback listener")
 	}
 
-	server, err := NewServer("127.0.0.1:0", tokenPath, manager, testLogger())
+	server, err := NewServer("127.0.0.1:0", tokenPath, "1.2.3-test", manager, testLogger())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,6 +97,13 @@ func TestServerAllowsWildcardWithWarningAndManagesPrivateToken(t *testing.T) {
 	}
 	if !strings.Contains(string(rootBody), `src="/theme-init.js"`) {
 		t.Fatal("root response does not load the theme prepaint script")
+	}
+	response = webRequest(t, http.DefaultClient, http.MethodGet,
+		"http://"+server.Address()+"/api/v1/info", strings.TrimSpace(string(contents)), "")
+	var daemonInfo infoResponse
+	decodeResponse(t, response, http.StatusOK, &daemonInfo)
+	if daemonInfo.Version != "1.2.3-test" {
+		t.Fatalf("daemon version = %q, want 1.2.3-test", daemonInfo.Version)
 	}
 	response, err = http.Get("http://" + server.Address() + "/theme-init.js")
 	if err != nil {

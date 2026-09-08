@@ -22,10 +22,48 @@ import (
 
 const testWebToken = "test-web-token"
 
+func TestInfoAPIReportsDaemonVersion(t *testing.T) {
+	t.Parallel()
+	manager, err := control.NewManager(control.Options{Logger: testLogger()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, version := range []string{"v1.2.3", "1.2.3-rc.1+abc123", "dev"} {
+		t.Run(version, func(t *testing.T) {
+			handler, err := newHandler(manager, testLogger(), testWebToken, version)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, token := range []string{"", "incorrect", testWebToken} {
+				request := httptest.NewRequest(http.MethodGet, "http://localhost/api/v1/info", nil)
+				if token != "" {
+					request.Header.Set("Authorization", "Bearer "+token)
+				}
+				response := httptest.NewRecorder()
+				handler.ServeHTTP(response, request)
+				if token != testWebToken {
+					if response.Code != http.StatusUnauthorized {
+						t.Fatalf("unauthorized info status = %d, want 401", response.Code)
+					}
+					continue
+				}
+				if got := response.Header().Get("Cache-Control"); got != "no-store" {
+					t.Errorf("info Cache-Control = %q, want no-store", got)
+				}
+				var info infoResponse
+				decodeResponse(t, response.Result(), http.StatusOK, &info)
+				if info.Version != version {
+					t.Errorf("info version = %q, want %q", info.Version, version)
+				}
+			}
+		})
+	}
+}
+
 func TestQueueAPIListsFiltersAndDetails(t *testing.T) {
 	t.Parallel()
 	manager, known, succeededJob, commandID := webTestQueue(t, true)
-	handler, err := newHandler(manager, testLogger(), testWebToken)
+	handler, err := newHandler(manager, testLogger(), testWebToken, "dev")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +131,7 @@ func TestQueueAPIListsFiltersAndDetails(t *testing.T) {
 func TestQueueAPIMutationsRequireSameOriginAndRetainStoppedQueue(t *testing.T) {
 	t.Parallel()
 	manager, known, _, _ := webTestQueue(t, true)
-	handler, err := newHandler(manager, testLogger(), testWebToken)
+	handler, err := newHandler(manager, testLogger(), testWebToken, "dev")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +191,7 @@ func TestQueueAPIIisolatesMissingDatabase(t *testing.T) {
 	if _, err := manager.StartMany([]string{readyConfig, missingConfig}, ""); err != nil {
 		t.Fatal(err)
 	}
-	handler, err := newHandler(manager, testLogger(), testWebToken)
+	handler, err := newHandler(manager, testLogger(), testWebToken, "dev")
 	if err != nil {
 		t.Fatal(err)
 	}

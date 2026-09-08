@@ -165,6 +165,7 @@ function Dashboard({
   onSignOut: (message?: string) => void
 }) {
   const [tab, setTab] = useState<'queues' | 'instances'>('queues')
+  const [version, setVersion] = useState<string | null>(null)
   const [queues, setQueues] = useState<QueueSummary[] | null>(null)
   const [instances, setInstances] = useState<Instance[] | null>(null)
   const [selectedQueueID, setSelectedQueueID] = useState('')
@@ -195,6 +196,20 @@ function Dashboard({
     }
     return error instanceof Error ? error.message : fallback
   }, [onSignOut])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void api.info(token, controller.signal)
+      .then((info) => {
+        if (!controller.signal.aborted) setVersion(info.version || '')
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return
+        handleError(error, 'Could not load version')
+        setVersion('')
+      })
+    return () => controller.abort()
+  }, [handleError, token])
 
   const refreshOverview = useCallback(async () => {
     if (overviewController.current) return
@@ -448,7 +463,7 @@ function Dashboard({
           <img className="brand-mark brand-mark-small" src="/icon.png" alt="" />
           <div>
             <strong>slipway</strong>
-            <span>Control room</span>
+            <span className="daemon-version">Version {version === null ? 'loading…' : version || 'unavailable'}</span>
           </div>
         </div>
         <nav className="topnav" aria-label="Primary">

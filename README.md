@@ -245,6 +245,11 @@ also shows job attempts and command metadata, loads captured output only when
 requested, and can restart a known queue or stop an active instance. The web
 API never accepts arbitrary config or database paths.
 
+The version beneath the Slipway name in the dashboard header identifies the
+running `slipwayd` build, including on mobile. Report this value when asking for
+help; it matches `slipwayd version` for that daemon binary. Builds made without
+a version override show `dev`.
+
 Every API request requires the bearer token. Keep the token private because it
 authorizes dashboard reads and start/stop actions as the daemon user. The
 listener also accepts an explicit wildcard address such as `0.0.0.0:8080` (or

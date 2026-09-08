@@ -1,6 +1,7 @@
 import type {
   APIErrorBody,
   CommandOutput,
+  InfoResponse,
   InstancesResponse,
   JobResponse,
   JobsResponse,
@@ -46,6 +47,7 @@ async function request<T>(path: string, token: string, init?: RequestInit): Prom
 }
 
 export const api = {
+  info: (token: string, signal?: AbortSignal) => request<InfoResponse>('/api/v1/info', token, { signal }),
   queues: (token: string, signal?: AbortSignal) => request<QueuesResponse>('/api/v1/queues', token, { signal }),
   instances: (token: string, signal?: AbortSignal) => request<InstancesResponse>('/api/v1/instances?all=true', token, { signal }),
   jobs: (token: string, queueID: string, status: string, watch: string, offset: number, signal?: AbortSignal) => {

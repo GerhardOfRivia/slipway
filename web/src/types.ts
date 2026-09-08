@@ -2,6 +2,10 @@ export type JobStatus = 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED'
 export type InstanceState = 'running' | 'stopping' | 'exited' | 'failed'
 export type CommandStatus = 'RUNNING' | 'SUCCEEDED' | 'FAILED'
 
+export interface InfoResponse {
+  version: string
+}
+
 export interface QueueCounts {
   queued: number
   running: number

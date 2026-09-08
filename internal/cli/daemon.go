@@ -47,7 +47,7 @@ func RunDaemonVersion(args []string, stdout, stderr io.Writer, version string) i
 		}
 	}
 
-	err := daemonCommand(args, stderr)
+	err := daemonCommand(args, stderr, version)
 	if err == nil || errors.Is(err, flag.ErrHelp) {
 		return 0
 	}
@@ -60,7 +60,7 @@ func RunDaemonVersion(args []string, stdout, stderr io.Writer, version string) i
 	return 1
 }
 
-func daemonCommand(args []string, stderr io.Writer) error {
+func daemonCommand(args []string, stderr io.Writer, version string) error {
 	flags := newFlagSet("slipwayd", stderr, "slipwayd [--config path] [--socket path] [--web-listen address] [--log-level level]")
 	configPath := flags.String("config", configPathDefault(), "optional YAML file or directory to start when the daemon starts")
 	socketPath := flags.String("socket", "", "control socket (defaults to SLIPWAY_SOCKET or a per-user path)")
@@ -105,7 +105,7 @@ func daemonCommand(args []string, stderr io.Writer) error {
 	}
 	var webServer *webui.Server
 	if address := strings.TrimSpace(*webListen); address != "" {
-		webServer, err = webui.NewServer(address, webTokenPath(server.Path()), manager, logger)
+		webServer, err = webui.NewServer(address, webTokenPath(server.Path()), version, manager, logger)
 		if err != nil {
 			_ = server.Close()
 			return err

@@ -39,6 +39,11 @@ var errQueueUninitialized = errors.New("queue database has not been created")
 type apiServer struct {
 	manager *control.Manager
 	logger  *slog.Logger
+	version string
+}
+
+type infoResponse struct {
+	Version string `json:"version"`
 }
 
 type queueCounts struct {
@@ -145,6 +150,10 @@ type errorEnvelope struct {
 type apiError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+}
+
+func (api *apiServer) handleInfo(output http.ResponseWriter, request *http.Request) {
+	writeJSON(output, http.StatusOK, infoResponse{Version: api.version})
 }
 
 func (api *apiServer) handleQueues(output http.ResponseWriter, request *http.Request) {
