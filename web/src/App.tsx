@@ -983,7 +983,58 @@ function CommandCard({ command, outputState, onLoadOutput }: { command: Command;
 }
 
 function OutputBlock({ label, value }: { label: string; value: string }) {
-  return <div className="output-block"><span>{label}</span><pre>{value || 'No output captured.'}</pre></div>
+  const outputRef = useRef<HTMLPreElement>(null)
+  const [copyState, setCopyState] = useState<'idle' | 'copying' | 'copied' | 'error'>('idle')
+
+  useEffect(() => {
+    if (copyState !== 'copied') return
+    const timer = window.setTimeout(() => setCopyState('idle'), 2000)
+    return () => window.clearTimeout(timer)
+  }, [copyState])
+
+  const copyOutput = async () => {
+    if (!value || copyState === 'copying') return
+    setCopyState('copying')
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value)
+      } else {
+        // Remote HTTP dashboards may not have access to the Clipboard API.
+        const selection = window.getSelection()
+        if (!selection || !outputRef.current) throw new Error('Copy unavailable')
+        const previousRanges = Array.from({ length: selection.rangeCount }, (_, index) => selection.getRangeAt(index).cloneRange())
+        const range = document.createRange()
+        range.selectNodeContents(outputRef.current)
+        try {
+          selection.removeAllRanges()
+          selection.addRange(range)
+          if (!document.execCommand('copy')) throw new Error('Copy failed')
+        } finally {
+          selection.removeAllRanges()
+          previousRanges.forEach((previousRange) => selection.addRange(previousRange))
+        }
+      }
+      setCopyState('copied')
+    } catch {
+      setCopyState('error')
+    }
+  }
+
+  return (
+    <div className="output-block">
+      <div className="output-block-heading">
+        <span>{label}</span>
+        <div className="output-copy-actions">
+          <span role="status">{copyState === 'copied' ? 'Copied!' : ''}</span>
+          <button type="button" onClick={() => void copyOutput()} disabled={!value || copyState === 'copying'} aria-label={`Copy ${label} to clipboard`}>
+            {copyState === 'copying' ? 'Copying…' : 'Copy'}
+          </button>
+        </div>
+      </div>
+      {copyState === 'error' && <p className="inline-warning" role="alert">Could not copy. Select the output and copy it manually.</p>}
+      <pre ref={outputRef}>{value || 'No output captured.'}</pre>
+    </div>
+  )
 }
 
 function Metric({ label, value, tone }: { label: string; value: number; tone: string }) {
