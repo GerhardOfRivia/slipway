@@ -1,7 +1,7 @@
 export type ThemePreference = 'system' | 'light' | 'dark'
 export type ThemeSurface = 'auth' | 'dashboard'
 
-export const themeStorageKey = 'slipway.web.theme'
+export const themeStorageKey = 'onderzeeer.web.theme'
 const preferences: ThemePreference[] = ['system', 'light', 'dark']
 
 export function readThemePreference(): ThemePreference {

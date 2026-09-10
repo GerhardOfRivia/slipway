@@ -12,7 +12,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/GerhardOfRivia/slipway/internal/config"
+	"github.com/GerhardOfRivia/onderzeeer/internal/config"
 	_ "modernc.org/sqlite"
 )
 
@@ -36,7 +36,7 @@ type registration struct {
 func ResolveStateDirectory(explicit string) (string, error) {
 	directory := strings.TrimSpace(explicit)
 	if directory == "" {
-		directory = strings.TrimSpace(os.Getenv("SLIPWAY_STATE_DIR"))
+		directory = strings.TrimSpace(os.Getenv("ONDERZEEER_STATE_DIR"))
 	}
 	if directory == "" {
 		base := os.Getenv("XDG_STATE_HOME")
@@ -47,7 +47,7 @@ func ResolveStateDirectory(explicit string) (string, error) {
 			}
 			base = filepath.Join(home, ".local", "state")
 		}
-		directory = filepath.Join(base, "slipway")
+		directory = filepath.Join(base, "onderzeeer")
 	}
 	return filepath.Abs(directory)
 }

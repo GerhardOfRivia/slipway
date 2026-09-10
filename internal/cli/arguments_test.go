@@ -71,9 +71,9 @@ func TestParseFlagsReportsErrorsAndHelpAfterPositionalArguments(t *testing.T) {
 
 func TestCommandsRejectExtraPositionalArguments(t *testing.T) {
 	t.Parallel()
-	for _, command := range []string{"check", "test", "start", "status", "queue", "jobs", "job", "logs", "slipwayd"} {
+	for _, command := range []string{"check", "test", "start", "status", "queue", "jobs", "job", "logs", "onderzeeerd"} {
 		args := []string{"pipeline.yaml"}
-		if command == "start" || command == "slipwayd" {
+		if command == "start" || command == "onderzeeerd" {
 			args = append(args, "worker")
 		}
 		if command == "job" || command == "logs" {
@@ -82,7 +82,7 @@ func TestCommandsRejectExtraPositionalArguments(t *testing.T) {
 		args = append(args, "unexpected")
 		var stdout, stderr bytes.Buffer
 		var code int
-		if command == "slipwayd" {
+		if command == "onderzeeerd" {
 			code = RunDaemon(args, &stdout, &stderr)
 		} else {
 			code = Run(append([]string{command}, args...), &stdout, &stderr)

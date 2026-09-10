@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/GerhardOfRivia/slipway/internal/config"
+	"github.com/GerhardOfRivia/onderzeeer/internal/config"
 )
 
 func TestRunManyRejectsEmptyAndNilConfigs(t *testing.T) {
@@ -32,10 +32,10 @@ func TestRunManyRejectsNormalizedDuplicateDatabasePathsBeforeStarting(t *testing
 	t.Parallel()
 
 	directory := t.TempDir()
-	database := filepath.Join(directory, "slipway.db")
+	database := filepath.Join(directory, "onderzeeer.db")
 	configs := []NamedConfig{
 		{Path: "first.yaml", Config: configWithDatabase(database)},
-		{Path: "second.yaml", Config: configWithDatabase(filepath.Join(directory, "unused", "..", "slipway.db"))},
+		{Path: "second.yaml", Config: configWithDatabase(filepath.Join(directory, "unused", "..", "onderzeeer.db"))},
 	}
 	var calls atomic.Int32
 	err := runMany(context.Background(), configs, nil, func(context.Context, *config.Config, *slog.Logger) error {
@@ -54,8 +54,8 @@ func TestRunManyRejectsHardLinkedDatabaseAliasesBeforeStarting(t *testing.T) {
 	t.Parallel()
 
 	directory := t.TempDir()
-	database := filepath.Join(directory, "slipway.db")
-	alias := filepath.Join(directory, "slipway-alias.db")
+	database := filepath.Join(directory, "onderzeeer.db")
+	alias := filepath.Join(directory, "onderzeeer-alias.db")
 	if err := os.WriteFile(database, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +252,7 @@ func TestRunManyAddsConfigPathToEachLogger(t *testing.T) {
 
 	var output bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&output, nil))
-	configs := []NamedConfig{{Path: "configured/path.yaml", Config: configWithDatabase(filepath.Join(t.TempDir(), "slipway.db"))}}
+	configs := []NamedConfig{{Path: "configured/path.yaml", Config: configWithDatabase(filepath.Join(t.TempDir(), "onderzeeer.db"))}}
 	err := runMany(context.Background(), configs, logger, func(_ context.Context, _ *config.Config, logger *slog.Logger) error {
 		logger.Info("runner started")
 		return nil

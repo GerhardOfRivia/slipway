@@ -7,7 +7,7 @@ import (
 )
 
 func checkCommand(args []string, stdout, stderr io.Writer) error {
-	flags := newFlagSet("check", stderr, "slipway check [--raw] <config>")
+	flags := newFlagSet("check", stderr, "onderzeeer check [--raw] <config>")
 	raw := flags.Bool("raw", false, "display the exact program and JSON argument array")
 	if err := parseFlags(flags, args); err != nil {
 		return err
@@ -24,7 +24,7 @@ func checkCommand(args []string, stdout, stderr io.Writer) error {
 		for _, watch := range item.config.Watches {
 			for index, command := range watch.Pipeline {
 				for _, warning := range command.Warnings() {
-					fmt.Fprintf(stderr, "slipway check: warning: %s: watch %q, step %d (%q): %s\n",
+					fmt.Fprintf(stderr, "onderzeeer check: warning: %s: watch %q, step %d (%q): %s\n",
 						item.path, watch.Name, index+1, command.Name, warning)
 				}
 			}

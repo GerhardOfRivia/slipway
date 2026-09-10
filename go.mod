@@ -1,4 +1,4 @@
-module github.com/GerhardOfRivia/slipway
+module github.com/GerhardOfRivia/onderzeeer
 
 go 1.24.0
 

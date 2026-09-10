@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/GerhardOfRivia/slipway/internal/config"
+	"github.com/GerhardOfRivia/onderzeeer/internal/config"
 	"gopkg.in/yaml.v3"
 )
 
@@ -35,7 +35,7 @@ type generatedMount struct {
 }
 
 func parseCommand(args []string, stdout, stderr io.Writer) error {
-	flags := newFlagSet("parse", stderr, "slipway parse [--name name] -- <program> [argument ...]")
+	flags := newFlagSet("parse", stderr, "onderzeeer parse [--name name] -- <program> [argument ...]")
 	name := flags.String("name", "", "pipeline step name (defaults from the program)")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -83,12 +83,12 @@ func parseCommand(args []string, stdout, stderr io.Writer) error {
 			step.Command = structured.command
 			step.CommandArgs = structured.commandArgs
 		} else if fallbackReason != "" {
-			fmt.Fprintf(stderr, "slipway parse: warning: %s; emitted raw runtime args\n", fallbackReason)
+			fmt.Fprintf(stderr, "onderzeeer parse: warning: %s; emitted raw runtime args\n", fallbackReason)
 		}
 	}
 	command := config.CommandConfig{Executor: executor, Program: program, Args: commandArgs}
 	for _, warning := range command.Warnings() {
-		fmt.Fprintf(stderr, "slipway parse: warning: %s\n", warning)
+		fmt.Fprintf(stderr, "onderzeeer parse: warning: %s\n", warning)
 	}
 
 	encoder := yaml.NewEncoder(stdout)

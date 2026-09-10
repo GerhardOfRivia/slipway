@@ -1,4 +1,4 @@
-name: slipway build and release
+name: onderzeeer build and release
 
 on:
   push:
@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: slipway-${{ github.workflow }}-${{ github.ref }}
+  group: onderzeeer-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref_type != 'tag' }}
 
 jobs:
@@ -95,17 +95,17 @@ jobs:
         run: |
           mkdir -p dist
           make build \
-            SLIPWAY_OUTPUT=dist/slipway-${GOOS}-${GOARCH} \
-            SLIPWAYD_OUTPUT=dist/slipwayd-${GOOS}-${GOARCH} \
+            ONDERZEEER_OUTPUT=dist/onderzeeer-${GOOS}-${GOARCH} \
+            ONDERZEEERD_OUTPUT=dist/onderzeeerd-${GOOS}-${GOARCH} \
             VERSION=${{ env.VERSION }}
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: slipway-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: onderzeeer-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
-            dist/slipway-${{ matrix.goos }}-${{ matrix.goarch }}
-            dist/slipwayd-${{ matrix.goos }}-${{ matrix.goarch }}
+            dist/onderzeeer-${{ matrix.goos }}-${{ matrix.goarch }}
+            dist/onderzeeerd-${{ matrix.goos }}-${{ matrix.goarch }}
 
   release:
     name: create release
@@ -115,7 +115,7 @@ jobs:
     permissions:
       contents: write
     concurrency:
-      group: slipway-release
+      group: onderzeeer-release
       queue: max
 
     steps:
@@ -131,19 +131,19 @@ jobs:
         run: |
           mkdir -p release
           
-          (cd dist/slipway-linux-amd64 \
-            && mv slipway-linux-amd64 slipway \
-            && mv slipwayd-linux-amd64 slipwayd \
-            && sha256sum slipway slipwayd > checksums.txt \
-            && tar -cvf ../../release/slipway-linux-amd64.tar *)
+          (cd dist/onderzeeer-linux-amd64 \
+            && mv onderzeeer-linux-amd64 onderzeeer \
+            && mv onderzeeerd-linux-amd64 onderzeeerd \
+            && sha256sum onderzeeer onderzeeerd > checksums.txt \
+            && tar -cvf ../../release/onderzeeer-linux-amd64.tar *)
 
-          (cd dist/slipway-linux-arm64 \
-            && mv slipway-linux-arm64 slipway \
-            && mv slipwayd-linux-arm64 slipwayd \
-            && sha256sum slipway slipwayd > checksums.txt \
-            && tar -cvf ../../release/slipway-linux-arm64.tar *)
+          (cd dist/onderzeeer-linux-arm64 \
+            && mv onderzeeer-linux-arm64 onderzeeer \
+            && mv onderzeeerd-linux-arm64 onderzeeerd \
+            && sha256sum onderzeeer onderzeeerd > checksums.txt \
+            && tar -cvf ../../release/onderzeeer-linux-arm64.tar *)
 
-          (cd release && sha256sum slipway-* > checksums.txt)
+          (cd release && sha256sum onderzeeer-* > checksums.txt)
           ls -lah release
 
       - name: Create Versioned Release
@@ -156,6 +156,6 @@ jobs:
           fi
           gh release create "$GITHUB_REF_NAME" release/* \
             --verify-tag \
-            --title "slipway $GITHUB_REF_NAME" \
+            --title "onderzeeer $GITHUB_REF_NAME" \
             "${release_flags[@]}" \
             --notes "Automated release for $GITHUB_REF_NAME"

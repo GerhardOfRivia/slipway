@@ -31,9 +31,9 @@ func (err *DaemonUnavailableError) Error() string {
 		return ErrDaemonUnavailable.Error()
 	}
 	if err.Err == nil {
-		return fmt.Sprintf("slipway daemon is unavailable at %s; start it with `slipwayd`", err.SocketPath)
+		return fmt.Sprintf("onderzeeer daemon is unavailable at %s; start it with `onderzeeerd`", err.SocketPath)
 	}
-	return fmt.Sprintf("slipway daemon is unavailable at %s: %v; start it with `slipwayd`", err.SocketPath, err.Err)
+	return fmt.Sprintf("onderzeeer daemon is unavailable at %s: %v; start it with `onderzeeerd`", err.SocketPath, err.Err)
 }
 
 func (err *DaemonUnavailableError) Unwrap() error {
@@ -56,12 +56,12 @@ type APIError struct {
 
 func (err *APIError) Error() string {
 	if err == nil {
-		return "slipway daemon request failed"
+		return "onderzeeer daemon request failed"
 	}
 	if err.Code == "" {
-		return fmt.Sprintf("slipway daemon request failed (%s): %s", http.StatusText(err.StatusCode), err.Message)
+		return fmt.Sprintf("onderzeeer daemon request failed (%s): %s", http.StatusText(err.StatusCode), err.Message)
 	}
-	return fmt.Sprintf("slipway daemon request failed (%s): %s", err.Code, err.Message)
+	return fmt.Sprintf("onderzeeer daemon request failed (%s): %s", err.Code, err.Message)
 }
 
 // Client is a standard-library HTTP client configured to dial one Unix
@@ -213,7 +213,7 @@ func (client *Client) RunWithOptions(
 				if ctx.Err() != nil {
 					return last, client.runAttachmentError(started, ctx.Err())
 				}
-				return last, client.runAttachmentError(started, errors.New("slipway daemon attachment ended before an exited event"))
+				return last, client.runAttachmentError(started, errors.New("onderzeeer daemon attachment ended before an exited event"))
 			}
 			if ctx.Err() != nil {
 				return last, client.runAttachmentError(started, ctx.Err())
@@ -223,20 +223,20 @@ func (client *Client) RunWithOptions(
 		switch event.Type {
 		case "started":
 			if started {
-				return last, errors.New("slipway daemon sent more than one started event")
+				return last, errors.New("onderzeeer daemon sent more than one started event")
 			}
 			if event.Instance.ID == "" {
-				return last, client.runAttachmentError(false, errors.New("slipway daemon sent a started event without an instance ID"))
+				return last, client.runAttachmentError(false, errors.New("onderzeeer daemon sent a started event without an instance ID"))
 			}
 			started = true
 			last = event.Instance
 		case "log":
 			if !started {
-				return last, client.runAttachmentError(false, errors.New("slipway daemon sent a log event before started"))
+				return last, client.runAttachmentError(false, errors.New("onderzeeer daemon sent a log event before started"))
 			}
 		case "exited":
 			if !started {
-				return last, client.runAttachmentError(false, errors.New("slipway daemon sent an exited event before started"))
+				return last, client.runAttachmentError(false, errors.New("onderzeeer daemon sent an exited event before started"))
 			}
 			last = event.Instance
 		case "error":
@@ -245,7 +245,7 @@ func (client *Client) RunWithOptions(
 			}
 			return last, client.runAttachmentError(started, errors.New(event.Error))
 		default:
-			return last, client.runAttachmentError(started, fmt.Errorf("slipway daemon sent unknown event type %q", event.Type))
+			return last, client.runAttachmentError(started, fmt.Errorf("onderzeeer daemon sent unknown event type %q", event.Type))
 		}
 		if onEvent != nil {
 			if err := onEvent(event); err != nil {
@@ -263,7 +263,7 @@ func (client *Client) runAttachmentError(started bool, err error) error {
 		return err
 	}
 	return fmt.Errorf(
-		"slipway daemon attachment via %s failed before the instance ID was acknowledged; an instance may still be running and the outcome may be unknown: %w",
+		"onderzeeer daemon attachment via %s failed before the instance ID was acknowledged; an instance may still be running and the outcome may be unknown: %w",
 		client.socketPath,
 		err,
 	)
@@ -310,7 +310,7 @@ func (client *Client) successResponseError(request *http.Request, err error) err
 	if request == nil || !methodMayMutate(request.Method) {
 		return err
 	}
-	return fmt.Errorf("slipway daemon returned an unreadable success response to %s via %s; outcome may be unknown: %w",
+	return fmt.Errorf("onderzeeer daemon returned an unreadable success response to %s via %s; outcome may be unknown: %w",
 		request.Method, client.socketPath, err)
 }
 
@@ -326,12 +326,12 @@ func (client *Client) newJSONRequest(ctx context.Context, method, path string, i
 		}
 		body = bytes.NewReader(encoded)
 	}
-	request, err := http.NewRequestWithContext(ctx, method, "http://slipway"+path, body)
+	request, err := http.NewRequestWithContext(ctx, method, "http://onderzeeer"+path, body)
 	if err != nil {
 		return nil, fmt.Errorf("create daemon request: %w", err)
 	}
 	request.Header.Set("Accept", "application/json")
-	request.Header.Set("X-slipway-API-Version", apiVersion)
+	request.Header.Set("X-onderzeeer-API-Version", apiVersion)
 	if input != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}
@@ -350,16 +350,16 @@ func (client *Client) do(request *http.Request) (*http.Response, error) {
 		if !methodMayMutate(request.Method) {
 			return nil, request.Context().Err()
 		}
-		return nil, fmt.Errorf("slipway daemon request via %s was interrupted; outcome may be unknown: %w", client.socketPath, request.Context().Err())
+		return nil, fmt.Errorf("onderzeeer daemon request via %s was interrupted; outcome may be unknown: %w", client.socketPath, request.Context().Err())
 	}
 	var unavailable *DaemonUnavailableError
 	if errors.As(err, &unavailable) {
 		return nil, unavailable
 	}
 	if !methodMayMutate(request.Method) {
-		return nil, fmt.Errorf("slipway daemon request via %s failed before a response: %w", client.socketPath, err)
+		return nil, fmt.Errorf("onderzeeer daemon request via %s failed before a response: %w", client.socketPath, err)
 	}
-	return nil, fmt.Errorf("slipway daemon request via %s failed before a response; outcome may be unknown: %w", client.socketPath, err)
+	return nil, fmt.Errorf("onderzeeer daemon request via %s failed before a response; outcome may be unknown: %w", client.socketPath, err)
 }
 
 func methodMayMutate(method string) bool {

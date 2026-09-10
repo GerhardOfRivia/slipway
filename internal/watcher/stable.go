@@ -14,7 +14,7 @@ import (
 
 var (
 	// ErrSymlink identifies a watched path whose final component is a symbolic
-	// link. slipway does not follow watched-file symlinks.
+	// link. onderzeeer does not follow watched-file symlinks.
 	ErrSymlink = errors.New("symbolic links are not watched")
 	// ErrPendingLimit identifies an instance whose simultaneous file-settling
 	// work reached its safety limit.
@@ -28,7 +28,7 @@ var (
 	// ErrWatchRootLost identifies a configured root path that no longer reaches
 	// the directory registered at startup, including after ancestor replacement.
 	ErrWatchRootLost = errors.New("configured watch root was removed or renamed")
-	// ErrFilesystemWatchLost identifies a mismatch between slipway's registered
+	// ErrFilesystemWatchLost identifies a mismatch between onderzeeer's registered
 	// directory set and the operating-system notification backend.
 	ErrFilesystemWatchLost = errors.New("filesystem watch registration was lost")
 )

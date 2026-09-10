@@ -11,10 +11,10 @@ import (
 
 func TestDiscoverExplicitFileRegardlessOfExtension(t *testing.T) {
 	root := t.TempDir()
-	filename := filepath.Join(root, "slipway.conf")
+	filename := filepath.Join(root, "onderzeeer.conf")
 	writeDiscoveryFile(t, filename)
 
-	paths, err := Discover(filepath.Join(root, ".", "subdir", "..", "slipway.conf"))
+	paths, err := Discover(filepath.Join(root, ".", "subdir", "..", "onderzeeer.conf"))
 	if err != nil {
 		t.Fatalf("Discover() error = %v", err)
 	}
@@ -107,8 +107,8 @@ func TestDiscoverExplicitRejectsNonFile(t *testing.T) {
 func TestDiscoverRequiresExplicitPath(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)
-	writeDiscoveryFile(t, "slipway")
-	writeDiscoveryFile(t, "slipway.yaml")
+	writeDiscoveryFile(t, "onderzeeer")
+	writeDiscoveryFile(t, "onderzeeer.yaml")
 	for _, selection := range []string{"", " ", "\t\n"} {
 		_, err := Discover(selection)
 		if err == nil || err.Error() != "configuration path is required" {

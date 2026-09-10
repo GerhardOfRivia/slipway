@@ -1,5 +1,5 @@
 (() => {
-  const storageKey = 'slipway.web.theme'
+  const storageKey = 'onderzeeer.web.theme'
   const allowedPreferences = new Set(['system', 'light', 'dark'])
   let preference = 'system'
   let signedIn = false
@@ -12,7 +12,7 @@
   }
 
   try {
-    signedIn = Boolean(window.sessionStorage.getItem('slipway.web.token'))
+    signedIn = Boolean(window.sessionStorage.getItem('onderzeeer.web.token'))
   } catch {
     // The token gate is the safe default when session storage is unavailable.
   }

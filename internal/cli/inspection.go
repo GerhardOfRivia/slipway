@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/GerhardOfRivia/slipway/internal/config"
-	"github.com/GerhardOfRivia/slipway/internal/control"
+	"github.com/GerhardOfRivia/onderzeeer/internal/config"
+	"github.com/GerhardOfRivia/onderzeeer/internal/control"
 )
 
 type inspectionOptions struct {
@@ -19,7 +19,7 @@ type inspectionOptions struct {
 func inspectionFlags(flags *flag.FlagSet) inspectionOptions {
 	return inspectionOptions{
 		local:  flags.Bool("local", false, "read the config's standalone queue database directly"),
-		socket: flags.String("socket", "", "daemon control socket (defaults to SLIPWAY_SOCKET or a per-user path)"),
+		socket: flags.String("socket", "", "daemon control socket (defaults to ONDERZEEER_SOCKET or a per-user path)"),
 	}
 }
 

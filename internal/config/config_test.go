@@ -93,7 +93,7 @@ watches:
 	if cfg.Queue.RetryDelay.Duration != 10*time.Second {
 		t.Errorf("retry delay = %s", cfg.Queue.RetryDelay.Duration)
 	}
-	wantDatabase, canonicalErr := CanonicalDatabasePath(filepath.Join(filepath.Dir(filename), "slipway.db"))
+	wantDatabase, canonicalErr := CanonicalDatabasePath(filepath.Join(filepath.Dir(filename), "onderzeeer.db"))
 	if canonicalErr != nil {
 		t.Fatal(canonicalErr)
 	}
@@ -994,7 +994,7 @@ queue: {workers: 2}
 
 func writeConfig(t *testing.T, contents string) string {
 	t.Helper()
-	filename := filepath.Join(t.TempDir(), "slipway.yaml")
+	filename := filepath.Join(t.TempDir(), "onderzeeer.yaml")
 	if err := os.WriteFile(filename, []byte(contents), 0o600); err != nil {
 		t.Fatal(err)
 	}

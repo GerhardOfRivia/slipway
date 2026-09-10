@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/GerhardOfRivia/slipway/internal/config"
-	"github.com/GerhardOfRivia/slipway/internal/control"
-	"github.com/GerhardOfRivia/slipway/internal/daemon"
+	"github.com/GerhardOfRivia/onderzeeer/internal/config"
+	"github.com/GerhardOfRivia/onderzeeer/internal/control"
+	"github.com/GerhardOfRivia/onderzeeer/internal/daemon"
 )
 
 func TestManagedCommandsLifecycle(t *testing.T) {
@@ -50,7 +50,7 @@ func TestManagedCommandsLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	socketPath := filepath.Join(root, "control", "slipway.sock")
+	socketPath := filepath.Join(root, "control", "onderzeeer.sock")
 	server, err := control.NewServer(socketPath, manager, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -165,12 +165,12 @@ func TestManagedCommandsReportUnavailableDaemon(t *testing.T) {
 			if stdout != "" {
 				t.Errorf("Run(%v) stdout = %q, want empty", test.args, stdout)
 			}
-			want := "slipway daemon is unavailable at " + socketPath
+			want := "onderzeeer daemon is unavailable at " + socketPath
 			if !strings.Contains(stderr, want) {
 				t.Errorf("Run(%v) stderr = %q, want it to contain %q", test.args, stderr, want)
 			}
-			if !strings.Contains(stderr, "start it with `slipwayd`") {
-				t.Errorf("Run(%v) stderr = %q, want slipwayd startup guidance", test.args, stderr)
+			if !strings.Contains(stderr, "start it with `onderzeeerd`") {
+				t.Errorf("Run(%v) stderr = %q, want onderzeeerd startup guidance", test.args, stderr)
 			}
 		})
 	}
@@ -196,7 +196,7 @@ watches:
 	}
 
 	missingSocket := filepath.Join(root, "missing.sock")
-	t.Setenv("SLIPWAY_SOCKET", missingSocket)
+	t.Setenv("ONDERZEEER_SOCKET", missingSocket)
 	code, stdout, stderr := managedCLI(t, "test", configPath)
 	if code != 1 {
 		t.Fatalf("run code = %d, want 1; stdout = %q, stderr = %q", code, stdout, stderr)
@@ -280,10 +280,10 @@ func TestManagedCommandUsage(t *testing.T) {
 		args []string
 		want string
 	}{
-		{name: "test missing config", args: []string{"test"}, want: "slipway: config path is required\n"},
-		{name: "start positional", args: []string{"start", "one.yaml", "worker", "extra"}, want: "slipway: start expects at most 2 positional arguments (config path, optional instance name)\n"},
-		{name: "ps positional", args: []string{"ps", "unexpected"}, want: "slipway: ps does not accept positional arguments\n"},
-		{name: "stop selector", args: []string{"stop"}, want: "slipway: stop requires at least one instance ID or name\n"},
+		{name: "test missing config", args: []string{"test"}, want: "onderzeeer: config path is required\n"},
+		{name: "start positional", args: []string{"start", "one.yaml", "worker", "extra"}, want: "onderzeeer: start expects at most 2 positional arguments (config path, optional instance name)\n"},
+		{name: "ps positional", args: []string{"ps", "unexpected"}, want: "onderzeeer: ps does not accept positional arguments\n"},
+		{name: "stop selector", args: []string{"stop"}, want: "onderzeeer: stop requires at least one instance ID or name\n"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -301,10 +301,10 @@ func TestManagedCommandHelp(t *testing.T) {
 		command string
 		usage   string
 	}{
-		{command: "test", usage: "Usage: slipway test <config>"},
-		{command: "start", usage: "Usage: slipway start <config-or-instance> [name] [--socket path]"},
-		{command: "ps", usage: "Usage: slipway ps [--all] [--socket path]"},
-		{command: "stop", usage: "Usage: slipway stop [--socket path] <id-or-name> [id-or-name ...]"},
+		{command: "test", usage: "Usage: onderzeeer test <config>"},
+		{command: "start", usage: "Usage: onderzeeer start <config-or-instance> [name] [--socket path]"},
+		{command: "ps", usage: "Usage: onderzeeer ps [--all] [--socket path]"},
+		{command: "stop", usage: "Usage: onderzeeer stop [--socket path] <id-or-name> [id-or-name ...]"},
 	}
 	for _, test := range tests {
 		t.Run(test.command, func(t *testing.T) {
@@ -354,7 +354,7 @@ func TestRunDaemonUsage(t *testing.T) {
 	if code := RunDaemon([]string{"--help"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("RunDaemon(--help) code = %d, stderr = %q", code, stderr.String())
 	}
-	if want := "slipwayd [--socket path] [--web-listen address] [--log-level level]"; !strings.Contains(stdout.String(), want) {
+	if want := "onderzeeerd [--socket path] [--web-listen address] [--log-level level]"; !strings.Contains(stdout.String(), want) {
 		t.Fatalf("RunDaemon(--help) output = %q, want it to contain %q", stdout.String(), want)
 	}
 	if stderr.Len() != 0 {
@@ -366,7 +366,7 @@ func TestRunDaemonUsage(t *testing.T) {
 	if code := RunDaemon([]string{writePlaceholderRunConfig(t, "worker.yaml")}, &stdout, &stderr); code != 2 {
 		t.Fatalf("RunDaemon(positional) code = %d, stderr = %q", code, stderr.String())
 	}
-	if got, want := stderr.String(), "slipwayd: does not accept positional arguments; register instances with slipway start <config> [name]\n"; got != want {
+	if got, want := stderr.String(), "onderzeeerd: does not accept positional arguments; register instances with onderzeeer start <config> [name]\n"; got != want {
 		t.Fatalf("RunDaemon(positional) stderr = %q, want %q", got, want)
 	}
 
@@ -375,7 +375,7 @@ func TestRunDaemonUsage(t *testing.T) {
 	if code := RunDaemon([]string{"--log-level", "mystery"}, &stdout, &stderr); code != 2 {
 		t.Fatalf("RunDaemon(invalid log level) code = %d, stderr = %q", code, stderr.String())
 	}
-	if got, want := stderr.String(), "slipwayd: unknown log level \"mystery\"\n"; got != want {
+	if got, want := stderr.String(), "onderzeeerd: unknown log level \"mystery\"\n"; got != want {
 		t.Fatalf("RunDaemon(invalid log level) stderr = %q, want %q", got, want)
 	}
 }
@@ -399,7 +399,7 @@ func TestRunDaemonVersion(t *testing.T) {
 		if code := RunDaemonVersion(args, &stdout, &stderr, "1.2.3-test"); code != 0 {
 			t.Fatalf("RunDaemonVersion(%v) code = %d, stderr = %q", args, code, stderr.String())
 		}
-		if got, want := stdout.String(), "slipwayd 1.2.3-test\n"; got != want {
+		if got, want := stdout.String(), "onderzeeerd 1.2.3-test\n"; got != want {
 			t.Errorf("RunDaemonVersion(%v) output = %q, want %q", args, got, want)
 		}
 	}
@@ -408,7 +408,7 @@ func TestRunDaemonVersion(t *testing.T) {
 	if code := RunDaemonVersion([]string{"version", "extra"}, &stdout, &stderr, "1.2.3-test"); code != 2 {
 		t.Fatalf("RunDaemonVersion(extra argument) code = %d, want 2", code)
 	}
-	if got, want := stderr.String(), "slipwayd: version does not accept arguments\n"; got != want {
+	if got, want := stderr.String(), "onderzeeerd: version does not accept arguments\n"; got != want {
 		t.Fatalf("RunDaemonVersion(extra argument) stderr = %q, want %q", got, want)
 	}
 }

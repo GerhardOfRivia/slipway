@@ -27,7 +27,7 @@ func (command CommandConfig) Warnings() []string {
 			break // Everything from the image/container name onward is application data.
 		}
 		if argument == "--it" || strings.HasPrefix(argument, "--it=") {
-			return []string{"Docker --it is not a valid option; -it requests an interactive TTY, which slipway does not provide. Remove --it for unattended jobs."}
+			return []string{"Docker --it is not a valid option; -it requests an interactive TTY, which onderzeeer does not provide. Remove --it for unattended jobs."}
 		}
 		option, reason := ParseContainerRunOption(ExecutorDocker, args)
 		if reason != "" {
@@ -45,7 +45,7 @@ func (command CommandConfig) Warnings() []string {
 		args = args[option.Consumed:]
 	}
 	if interactive && tty && !detach {
-		return []string{"Docker interactive TTY flags (-it, or --interactive with --tty) can fail because slipway provides no interactive stdin or TTY. Remove -i/--interactive and -t/--tty for unattended jobs."}
+		return []string{"Docker interactive TTY flags (-it, or --interactive with --tty) can fail because onderzeeer provides no interactive stdin or TTY. Remove -i/--interactive and -t/--tty for unattended jobs."}
 	}
 	return nil
 }

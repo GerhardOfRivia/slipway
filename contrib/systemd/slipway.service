@@ -1,33 +1,33 @@
 [Unit]
-Description=slipway file-triggered job runner
-Documentation=https://github.com/GerhardOfRivia/slipway
+Description=onderzeeer file-triggered job runner
+Documentation=https://github.com/GerhardOfRivia/onderzeeer
 After=local-fs.target
 StartLimitIntervalSec=60
 StartLimitBurst=5
 
 [Service]
 Type=simple
-User=slipway
-Group=slipway
+User=onderzeeer
+Group=onderzeeer
 
-# Set the socket and optional dashboard in /etc/default/slipway.
+# Set the socket and optional dashboard in /etc/default/onderzeeer.
 # The leading '-' makes the environment file optional.
-# Environment=SLIPWAY_SOCKET=/run/slipway/slipway.sock
-# Environment=SLIPWAY_WEB_LISTEN=127.0.0.1:8080
+# Environment=ONDERZEEER_SOCKET=/run/onderzeeer/onderzeeer.sock
+# Environment=ONDERZEEER_WEB_LISTEN=127.0.0.1:8080
 # token-protected dashboard. It is intentionally disabled by default.
-# EnvironmentFile=-/etc/default/slipway
-Environment=SLIPWAY_STATE_DIR=/var/lib/slipway
+# EnvironmentFile=-/etc/default/onderzeeer
+Environment=ONDERZEEER_STATE_DIR=/var/lib/onderzeeer
 
-# Register instances with slipway start; daemon restarts restore the registry.
-# with SELinux make sure you need to run; restorecon -v /usr/local/bin/slipwayd
-ExecStart=/usr/local/bin/slipwayd
-WorkingDirectory=/var/lib/slipway
+# Register instances with onderzeeer start; daemon restarts restore the registry.
+# with SELinux make sure you need to run; restorecon -v /usr/local/bin/onderzeeerd
+ExecStart=/usr/local/bin/onderzeeerd
+WorkingDirectory=/var/lib/onderzeeer
 
 # systemd creates the persistent queue-data and private runtime directories and
 # keeps them owned by the service account.
-StateDirectory=slipway
+StateDirectory=onderzeeer
 StateDirectoryMode=0750
-RuntimeDirectory=slipway
+RuntimeDirectory=onderzeeer
 RuntimeDirectoryMode=0700
 UMask=0027
 
@@ -40,7 +40,7 @@ KillMode=mixed
 
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=slipway
+SyslogIdentifier=onderzeeer
 
 [Install]
 WantedBy=multi-user.target

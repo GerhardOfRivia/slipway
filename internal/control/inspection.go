@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/GerhardOfRivia/slipway/internal/config"
-	"github.com/GerhardOfRivia/slipway/internal/queue"
+	"github.com/GerhardOfRivia/onderzeeer/internal/config"
+	"github.com/GerhardOfRivia/onderzeeer/internal/queue"
 )
 
 func (server *Server) handleQueueSelection(output http.ResponseWriter, request *http.Request) {
@@ -150,7 +150,7 @@ func (reader *QueueReader) read(ctx context.Context, operation string, values ur
 	// Captured command output may exceed the ordinary control response limit.
 	// Decode it as a stream instead of holding a second full response buffer.
 	path := "/v1/queues/" + url.PathEscape(reader.id) + "/" + operation + "?" + values.Encode()
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://slipway"+path, nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://onderzeeer"+path, nil)
 	if err != nil {
 		return err
 	}

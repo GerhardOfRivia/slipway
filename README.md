@@ -1,46 +1,46 @@
-# slipway
+# onderzeeer
 
-slipway is a small, durable file-triggered job runner. It watches directories,
+onderzeeer is a small, durable file-triggered job runner. It watches directories,
 waits for matching files to stop changing, queues them in SQLite, and runs a
-command pipeline for each file. Use `slipway` to run and inspect jobs, and
-`slipwayd` to manage background instances and an optional web dashboard.
+command pipeline for each file. Use `onderzeeer` to run and inspect jobs, and
+`onderzeeerd` to manage background instances and an optional web dashboard.
 
 written and designed with help from openai's (5.6 sol)
 
 ## quick install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/GerhardOfRivia/slipway/refs/heads/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/GerhardOfRivia/onderzeeer/refs/heads/main/install.sh | sh
 ```
 
-slipway supports Linux on AMD64 and ARM64. The installer places both `slipway`
-and `slipwayd` in the selected install directory.
+onderzeeer supports Linux on AMD64 and ARM64. The installer places both `onderzeeer`
+and `onderzeeerd` in the selected install directory.
 
 ## getting started
 
 Run a config in the foreground:
 
 ```bash
-slipway test csv_pipeline.yaml
+onderzeeer test csv_pipeline.yaml
 ```
 
 `test` takes a config path, runs the pipeline in the foreground, and owns
 its standalone queue database. No instance name is needed. It does not contact
-`slipwayd`. Press Ctrl-C to stop gracefully.
+`onderzeeerd`. Press Ctrl-C to stop gracefully.
 
 To manage an instance in the background, first start the daemon as the user that
 should run the configured programs:
 
 ```bash
-slipwayd
+onderzeeerd
 ```
 
 Then use the daemon-backed lifecycle commands from another terminal:
 
 ```bash
-slipway start csv_pipeline.yaml csv-pipeline
-slipway ps
-slipway stop csv-pipeline
+onderzeeer start csv_pipeline.yaml csv-pipeline
+onderzeeer ps
+onderzeeer stop csv-pipeline
 ```
 
 `test` requires exactly one selected config. `start` derives a name from the
@@ -49,17 +49,17 @@ instance its own queue database; only standalone runs use `database.path`.
 Only daemon-managed instances appear in `ps`.
 
 Config paths are always explicit; there is no automatic discovery or
-`SLIPWAY_CONFIG` fallback. Options may appear before or after positional
+`ONDERZEEER_CONFIG` fallback. Options may appear before or after positional
 arguments. Use `--` for paths beginning with a dash, as in
-`slipway check -- -pipeline.yaml`.
+`onderzeeer check -- -pipeline.yaml`.
 
 ## checking configuration
 
 Validate a config and display each watch's pipeline without running it:
 
 ```bash
-slipway check csv_pipeline.yaml
-slipway check --raw csv_pipeline.yaml
+onderzeeer check csv_pipeline.yaml
+onderzeeer check --raw csv_pipeline.yaml
 ```
 
 `check` accepts a YAML file or directory and never contacts the daemon or opens
@@ -72,10 +72,10 @@ argument array.
 ## generating pipeline configuration
 
 `parse` turns an already shell-tokenized command into a pipeline YAML fragment
-without executing it. Use `--` to separate slipway's options from the command:
+without executing it. Use `--` to separate onderzeeer's options from the command:
 
 ```bash
-slipway parse -- docker run --rm --gpus all \
+onderzeeer parse -- docker run --rm --gpus all \
   --mount 'type=bind,source={{dir}},target=/input,readonly' \
   --env 'INPUT={{basename}}' \
   nvidia/cuda:12.8.1-base-ubuntu24.04 nvidia-smi --query-gpu=name
@@ -115,7 +115,7 @@ host source to exist. Converted relative sources resolve from the YAML file's
 directory, not the directory where `parse` ran.
 
 `parse`, `check`, and instance startup warn about Docker's interactive TTY flags
-(`-it`, or `--interactive --tty`) and the invalid `--it` spelling. slipway provides
+(`-it`, or `--interactive --tty`) and the invalid `--it` spelling. onderzeeer provides
 no interactive stdin or TTY; remove these flags for unattended jobs. Warnings
 leave the supplied arguments unchanged.
 
@@ -124,11 +124,11 @@ leave the supplied arguments unchanged.
 The daemon exposes its lifecycle API over a local Unix socket:
 
 ```text
-slipwayd [--state-dir path] [--socket path] [--web-listen address] [--log-level level]
-slipway test <config>
-slipway start <config-or-instance> [name] [--socket path]
-slipway ps [--all] [--socket path]
-slipway stop [--socket path] id-or-name [id-or-name ...]
+onderzeeerd [--state-dir path] [--socket path] [--web-listen address] [--log-level level]
+onderzeeer test <config>
+onderzeeer start <config-or-instance> [name] [--socket path]
+onderzeeer ps [--all] [--socket path]
+onderzeeer stop [--socket path] id-or-name [id-or-name ...]
 ```
 
 `start`, `ps`, and `stop` require a running daemon. `start` persistently registers
@@ -138,26 +138,26 @@ multiple IDs or names and persists the intention to stay stopped, including
 when an instance has already failed.
 
 The daemon stores `registry.sqlite` and `queues/<instance-id>.sqlite` in a
-persistent state directory, selected by `--state-dir`, `SLIPWAY_STATE_DIR`, or
-`$XDG_STATE_HOME/slipway` (default `~/.local/state/slipway`). Only one daemon may
+persistent state directory, selected by `--state-dir`, `ONDERZEEER_STATE_DIR`, or
+`$XDG_STATE_HOME/onderzeeer` (default `~/.local/state/onderzeeer`). Only one daemon may
 own a state directory, even if another socket is specified. Keep the complete
 state directory, including SQLite companion files, on persistent storage.
 
 On every daemon start, saved instances whose desired state is running resume
 automatically with their stable IDs, names, queues, and validated configuration
 snapshots. Shutting down the daemon preserves this intention; an explicit
-`slipway stop` clears it. Individual runner failures remain visible in `ps --all`
+`onderzeeer stop` clears it. Individual runner failures remain visible in `ps --all`
 and do not prevent other instances from starting. Failed instances are retried
 on the next daemon start; there is no automatic crash loop during a daemon run.
 
-The original YAML need not remain available for recovery. `slipway start NAME`
+The original YAML need not remain available for recovery. `onderzeeer start NAME`
 (or an ID) resumes the saved snapshot. To apply YAML edits, stop the instance and
 start its config path again; this retains its ID and queue. Snapshot paths and
 the default command working directory are fixed at registration. Referenced
 watch directories, programs, and images must still be available to the daemon.
 
-Start the daemon with `slipwayd`, then register each instance from another
-terminal with `slipway start <config> [name]`. The daemon accepts only its own
+Start the daemon with `onderzeeerd`, then register each instance from another
+terminal with `onderzeeer start <config> [name]`. The daemon accepts only its own
 options; config paths, directories, and instance names belong to the client.
 Every daemon start restores the saved registry; a new state directory starts
 empty.
@@ -167,9 +167,9 @@ or older-version queue files are left untouched and are not automatically
 imported into new managed queues. Inspect those files with `--local`; registering
 a new managed instance starts fresh queue history.
 
-The foreground command is `slipway test <config>`. It replaces `slipway run`,
+The foreground command is `onderzeeer test <config>`. It replaces `onderzeeer run`,
 accepts no instance name, `--rm`, or `--socket`, and never registers an instance
-with the daemon. It executes pipeline commands; use `slipway check` to validate
+with the daemon. It executes pipeline commands; use `onderzeeer check` to validate
 and inspect a config without executing it.
 
 Instance logs include a unique `instance_id` and a stable SHA-256 `config_hash`
@@ -178,9 +178,9 @@ of the effective configuration for comparing runs.
 The socket used by each daemon-backed command is selected in this order:
 
 1. Its explicit `--socket` value.
-2. `SLIPWAY_SOCKET`, when set.
-3. `$XDG_RUNTIME_DIR/slipway/slipway.sock`, when `XDG_RUNTIME_DIR` is set.
-4. `slipway/slipway.sock` beneath the operating system's per-user cache directory.
+2. `ONDERZEEER_SOCKET`, when set.
+3. `$XDG_RUNTIME_DIR/onderzeeer/onderzeeer.sock`, when `XDG_RUNTIME_DIR` is set.
+4. `onderzeeer/onderzeeer.sock` beneath the operating system's per-user cache directory.
 5. A UID-specific directory beneath the system temporary directory when no
    user cache directory is available.
 
@@ -192,16 +192,16 @@ starting programs as the daemon user. Prefer one daemon per user.
 Enable the embedded dashboard with a loopback listener (disabled by default):
 
 ```bash
-slipwayd --web-listen 127.0.0.1:8080
+onderzeeerd --web-listen 127.0.0.1:8080
 ```
 
-Alternatively, set `SLIPWAY_WEB_LISTEN`. Open <http://127.0.0.1:8080> and paste
+Alternatively, set `ONDERZEEER_WEB_LISTEN`. Open <http://127.0.0.1:8080> and paste
 the token from the file named in the startup log. The file is beside the
 control socket with suffix `.web-token` and mode `0600`; it is replaced at
 startup and removed on clean shutdown. For the system service:
 
 ```bash
-sudo cat /run/slipway/slipway.sock.web-token
+sudo cat /run/onderzeeer/onderzeeer.sock.web-token
 ```
 
 The dashboard shows known queues, job counts, attempts, commands, and captured
@@ -221,17 +221,17 @@ restrict access with a firewall and protect the network path.
 Inspect a managed instance by name, ID, or its registered config path:
 
 ```bash
-slipway status incoming
-slipway queue incoming
-slipway jobs incoming --status failed
-slipway jobs incoming --watch incoming
-slipway job incoming 42
-slipway logs incoming 42
+onderzeeer status incoming
+onderzeeer queue incoming
+onderzeeer jobs incoming --status failed
+onderzeeer jobs incoming --watch incoming
+onderzeeer job incoming 42
+onderzeeer logs incoming 42
 ```
 
 `status` prints counts; `queue` lists queued and running jobs; `jobs` lists job
 history. `job` shows a job's runs and commands, and `logs` prints captured command
-stdout and stderr. These commands read through `slipwayd` and accept `--socket`.
+stdout and stderr. These commands read through `onderzeeerd` and accept `--socket`.
 Stopped instances remain inspectable, even if their original YAML is gone.
 A config-directory path selects its registered queues; select one instance when
 a job ID exists in multiple queues.
@@ -239,8 +239,8 @@ a job ID exists in multiple queues.
 Use `--local` to inspect a standalone or legacy queue directly, without a daemon:
 
 ```bash
-slipway status --local incoming.yaml
-slipway logs --local incoming.yaml 42
+onderzeeer status --local incoming.yaml
+onderzeeer logs --local incoming.yaml 42
 ```
 
 Local inspection loads the selected YAML file or directory and opens each
@@ -256,10 +256,10 @@ queue:
   retry_delay: 10s
 
 database:
-  path: ./slipway.db
+  path: ./onderzeeer.db
 
 values:
-  shared_dir: /srv/slipway
+  shared_dir: /srv/onderzeeer
 
 watches:
   - name: incoming
@@ -288,11 +288,11 @@ watches:
         working_directory: "{{shared_dir}}"
         output: "{{shared_dir}}/{{stem}}.json"
         env:
-          SLIPWAY_INPUT: "{{basename}}"
+          ONDERZEEER_INPUT: "{{basename}}"
 ```
 
 Durations use Go syntax such as `250ms`, `10s`, `15m`, `2h`. The defaults are one
-worker per CPU, a `10s` retry delay, a `1s` settle period, and `./slipway.db`.
+worker per CPU, a `10s` retry delay, a `1s` settle period, and `./onderzeeer.db`.
 `max_retries` counts retries after the first attempt.
 
 Relative database, watch, working-directory, and bind-mount source paths resolve
@@ -361,7 +361,7 @@ Container entries can describe the invocation with structured fields:
               - ro
               - bind-propagation=rslave
         container_env:
-          SLIPWAY_INPUT: "{{basename}}"
+          ONDERZEEER_INPUT: "{{basename}}"
         command: /app/process-file
         command_args:
           - "--input"
@@ -457,7 +457,7 @@ container managed by a separate daemon may outlive it. `--rm` removes a containe
 after exit; it does not stop it. Use a runtime-aware wrapper or container-side
 deadline when cancellation must stop the workload.
 
-Bind-mount sources must be accessible to the runtime; slipway does not create
+Bind-mount sources must be accessible to the runtime; onderzeeer does not create
 or transfer them. Remote daemons and VM-backed runtimes may not see host paths.
 
 `output` saves complete stdout to a file; stderr stays in captured history.
@@ -491,16 +491,16 @@ output-pipe cleanup is time-bounded so they cannot indefinitely block shutdown.
 
 ## container
 
-Run as your regular, non-root user from the Slipway repository root.
+Run as your regular, non-root user from the Onderzeeer repository root.
 The UID/GID must be nonzero and not conflict with existing base-image accounts.
 For standard Docker without user-namespace remapping:
 
 ```bash
 docker build --pull \
-  --build-arg SLIPWAY_UID="$(id -u)" \
-  --build-arg SLIPWAY_GID="$(id -g)" \
+  --build-arg ONDERZEEER_UID="$(id -u)" \
+  --build-arg ONDERZEEER_GID="$(id -g)" \
   --build-arg VERSION="$(git describe --tags --always --dirty)" \
-  -t localhost/slipway:local .
+  -t localhost/onderzeeer:local .
 ```
 
 For Podman, replace `docker build --pull` with
@@ -514,8 +514,8 @@ platform; cross-compilation or emulation requires separate setup.
 Use a private socket directory and a persistent workspace:
 
 ```bash
-SOCKET_DIR="${XDG_RUNTIME_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}}/slipway"
-WORKSPACE="$HOME/slipway-work"
+SOCKET_DIR="${XDG_RUNTIME_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}}/onderzeeer"
+WORKSPACE="$HOME/onderzeeer-work"
 
 install -d -m 0700 "$SOCKET_DIR"
 mkdir -p "$WORKSPACE/configs" "$WORKSPACE/incoming" "$WORKSPACE/state"
@@ -529,35 +529,35 @@ mapped UID and have mode 0700; image-layer ownership cannot fix a bind mount.
 
 ```bash
 docker run -d \
-  --name slipwayd \
+  --name onderzeeerd \
   --restart unless-stopped \
   --stop-timeout 45 \
-  --mount "type=bind,src=$SOCKET_DIR,dst=/run/slipway" \
+  --mount "type=bind,src=$SOCKET_DIR,dst=/run/onderzeeer" \
   --mount "type=bind,src=$WORKSPACE,dst=$WORKSPACE" \
   --workdir "$WORKSPACE" \
-  --env "SLIPWAY_STATE_DIR=$WORKSPACE/state" \
-  localhost/slipway:local
+  --env "ONDERZEEER_STATE_DIR=$WORKSPACE/state" \
+  localhost/onderzeeer:local
 ```
 
 ### run with rootless Podman instead
 
 ```bash
 podman run -d \
-  --name slipwayd \
+  --name onderzeeerd \
   --restart unless-stopped \
   --stop-timeout 45 \
   --userns=keep-id \
-  --mount "type=bind,src=$SOCKET_DIR,dst=/run/slipway" \
+  --mount "type=bind,src=$SOCKET_DIR,dst=/run/onderzeeer" \
   --mount "type=bind,src=$WORKSPACE,dst=$WORKSPACE" \
   --workdir "$WORKSPACE" \
-  --env "SLIPWAY_STATE_DIR=$WORKSPACE/state" \
-  localhost/slipway:local
+  --env "ONDERZEEER_STATE_DIR=$WORKSPACE/state" \
+  localhost/onderzeeer:local
 ```
 
 On SELinux-enforcing systems, replace the two `--mount` options with:
 
 ```bash
--v "$SOCKET_DIR:/run/slipway:z" \
+-v "$SOCKET_DIR:/run/onderzeeer:z" \
 -v "$WORKSPACE:$WORKSPACE:z"
 ```
 
@@ -570,34 +570,34 @@ as a workaround. Rootless restart-at-boot requires separate service/session setu
 ### connect a host-side client
 
 ```bash
-export SLIPWAY_SOCKET="$SOCKET_DIR/slipway.sock"
-slipway ps
+export ONDERZEEER_SOCKET="$SOCKET_DIR/onderzeeer.sock"
+onderzeeer ps
 
 # Once this config exists and its paths/executables are usable in the container:
-slipway start "$WORKSPACE/configs/incoming.yaml" incoming
+onderzeeer start "$WORKSPACE/configs/incoming.yaml" incoming
 
 # The image includes a client for diagnostics too:
-docker exec slipwayd slipway ps
-docker logs slipwayd
+docker exec onderzeeerd onderzeeer ps
+docker logs onderzeeerd
 ```
 
 Use `podman exec` and `podman logs` for a Podman-managed container.
 
 The workspace is mounted at the same absolute path on both sides because
-`slipway start` sends config paths to the daemon, which reads and saves a snapshot.
-Set `SLIPWAY_STATE_DIR` to a persistent mounted directory; the Compose example
-uses `${SLIPWAY_WORKSPACE}/state`. It contains both the registry and managed queues.
+`onderzeeer start` sends config paths to the daemon, which reads and saves a snapshot.
+Set `ONDERZEEER_STATE_DIR` to a persistent mounted directory; the Compose example
+uses `${ONDERZEEER_WORKSPACE}/state`. It contains both the registry and managed queues.
 Persist the complete state directory, including SQLite companion files.
 
 The health check validates control-API connectivity, not successful pipeline
-processing. Override the socket through `SLIPWAY_SOCKET` rather than only through
+processing. Override the socket through `ONDERZEEER_SOCKET` rather than only through
 `--socket`, so both daemon and health-check client use the new address.
 
 ### restart behavior
 
-Instances submitted with `slipway start` resume automatically when the container
-starts using the same persistent `SLIPWAY_STATE_DIR`. Explicitly stopped
-instances stay stopped. Register new instances through `slipway start` after
+Instances submitted with `onderzeeer start` resume automatically when the container
+starts using the same persistent `ONDERZEEER_STATE_DIR`. Explicitly stopped
+instances stay stopped. Register new instances through `onderzeeer start` after
 the container is running.
 
 ### optional dashboard
@@ -605,7 +605,7 @@ the container is running.
 To enable the embedded dashboard, add these options **before** the image name:
 
 ```bash
---env SLIPWAY_WEB_LISTEN=0.0.0.0:5280 \
+--env ONDERZEEER_WEB_LISTEN=0.0.0.0:5280 \
 --publish 127.0.0.1:5280:5280
 ```
 
@@ -613,10 +613,10 @@ Open <http://127.0.0.1:5280> and read the access token on the host:
 
 ```bash
 # Docker
-docker exec slipwayd cat /run/slipway/slipway.sock.web-token
+docker exec onderzeeerd cat /run/onderzeeer/onderzeeer.sock.web-token
 
 # Docker Compose
-docker compose exec -T slipwayd cat /run/slipway/slipway.sock.web-token
+docker compose exec -T onderzeeerd cat /run/onderzeeer/onderzeeer.sock.web-token
 ```
 
 This binds the application to all interfaces inside the container but publishes
@@ -626,58 +626,58 @@ expose its unencrypted HTTP listener to an untrusted network.
 
 ## systemd
 
-Install the binaries and [example unit](contrib/systemd/slipway.service),
+Install the binaries and [example unit](contrib/systemd/onderzeeer.service),
 create a dedicated service account, and add a config:
 
 ```bash
-go build -o slipway ./cmd/slipway
-go build -o slipwayd ./cmd/slipwayd
-sudo install -Dm0755 slipway /usr/local/bin/slipway
-sudo install -Dm0755 slipwayd /usr/local/bin/slipwayd
-sudo install -Dm0644 contrib/systemd/slipway.service /etc/systemd/system/slipway.service
+go build -o onderzeeer ./cmd/onderzeeer
+go build -o onderzeeerd ./cmd/onderzeeerd
+sudo install -Dm0755 onderzeeer /usr/local/bin/onderzeeer
+sudo install -Dm0755 onderzeeerd /usr/local/bin/onderzeeerd
+sudo install -Dm0644 contrib/systemd/onderzeeer.service /etc/systemd/system/onderzeeer.service
 
 # Skip useradd if the account already exists.
-sudo useradd --system --home-dir /var/lib/slipway --shell /usr/sbin/nologin slipway
-sudo install -d -m0755 /etc/slipway.d
-sudo install -o root -g slipway -m0640 ./my-slipway.yaml /etc/slipway.d/incoming.yaml
+sudo useradd --system --home-dir /var/lib/onderzeeer --shell /usr/sbin/nologin onderzeeer
+sudo install -d -m0755 /etc/onderzeeer.d
+sudo install -o root -g onderzeeer -m0640 ./my-onderzeeer.yaml /etc/onderzeeer.d/incoming.yaml
 ```
 
-Replace `./my-slipway.yaml` with your [configuration](#configuration).
+Replace `./my-onderzeeer.yaml` with your [configuration](#configuration).
 
-The system service sets `SLIPWAY_STATE_DIR=/var/lib/slipway` for the registry and
-managed queues. Every managed pipeline runs as the `slipway` account,
+The system service sets `ONDERZEEER_STATE_DIR=/var/lib/onderzeeer` for the registry and
+managed queues. Every managed pipeline runs as the `onderzeeer` account,
 so ensure that account can traverse each watch directory, read input files,
 execute pipeline programs, and write any pipeline outputs. systemd creates
-`/var/lib/slipway` through `StateDirectory=slipway` and the private socket directory
-`/run/slipway` through `RuntimeDirectory=slipway`.
+`/var/lib/onderzeeer` through `StateDirectory=onderzeeer` and the private socket directory
+`/run/onderzeeer` through `RuntimeDirectory=onderzeeer`.
 
-Set the control socket and optional dashboard in `/etc/default/slipway`:
+Set the control socket and optional dashboard in `/etc/default/onderzeeer`:
 
 ```bash
-SLIPWAY_SOCKET=/run/slipway/slipway.sock
+ONDERZEEER_SOCKET=/run/onderzeeer/onderzeeer.sock
 # Optional; the dashboard is disabled when this is unset.
-# SLIPWAY_WEB_LISTEN=127.0.0.1:8080
+# ONDERZEEER_WEB_LISTEN=127.0.0.1:8080
 ```
 
 The unit restores registered instances and restarts after failures. Register
-instances with `slipway start` after starting the service; no unit edits are
+instances with `onderzeeer start` after starting the service; no unit edits are
 needed for individual instances.
 
 Load and start the service:
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now slipway
-sudo systemctl status slipway
-sudo slipway ps --socket /run/slipway/slipway.sock
-sudo journalctl -u slipway -f
+sudo systemctl enable --now onderzeeer
+sudo systemctl status onderzeeer
+sudo onderzeeer ps --socket /run/onderzeeer/onderzeeer.sock
+sudo journalctl -u onderzeeer -f
 ```
 
-Apply later changes with `sudo systemctl restart slipway`.
+Apply later changes with `sudo systemctl restart onderzeeer`.
 
-The packaged system socket is private to root and the `slipway` service account.
+The packaged system socket is private to root and the `onderzeeer` service account.
 If you deliberately relax its ownership or permissions, every user who can
-connect to it can make the service execute configured programs as `slipway`. A
+connect to it can make the service execute configured programs as `onderzeeer`. A
 per-user daemon is recommended for interactive and user-owned workloads.
 
 ## architecture
@@ -692,7 +692,7 @@ per-user daemon is recommended for interactive and user-owned workloads.
   wiring
 - `internal/control`: instance supervision, Unix-socket API, and client
 - `internal/webui`: optional token-protected dashboard API and embedded frontend
-- `internal/cli`: command parsing for the `slipway` client and `slipwayd` daemon
+- `internal/cli`: command parsing for the `onderzeeer` client and `onderzeeerd` daemon
 
 ## development
 
@@ -708,23 +708,23 @@ example uses Go 1.27.0 for Linux on AMD64; choose another published version or
 supported Linux architecture from [go.dev/dl](https://go.dev/dl/) when needed.
 
 ```bash
-export SLIPWAY_GO_VERSION=1.27.0
-export SLIPWAY_GO_OS=linux
-export SLIPWAY_GO_ARCH=amd64
-export SLIPWAY_GO_DIR=$(pwd)/.go
+export ONDERZEEER_GO_VERSION=1.27.0
+export ONDERZEEER_GO_OS=linux
+export ONDERZEEER_GO_ARCH=amd64
+export ONDERZEEER_GO_DIR=$(pwd)/.go
 
-mkdir -p "$SLIPWAY_GO_DIR/toolchain"
+mkdir -p "$ONDERZEEER_GO_DIR/toolchain"
 curl -fL \
-  "https://go.dev/dl/go${SLIPWAY_GO_VERSION}.${SLIPWAY_GO_OS}-${SLIPWAY_GO_ARCH}.tar.gz" \
-  -o "$SLIPWAY_GO_DIR/go.tar.gz"
-tar -xzf "$SLIPWAY_GO_DIR/go.tar.gz" \
-  -C "$SLIPWAY_GO_DIR/toolchain" \
+  "https://go.dev/dl/go${ONDERZEEER_GO_VERSION}.${ONDERZEEER_GO_OS}-${ONDERZEEER_GO_ARCH}.tar.gz" \
+  -o "$ONDERZEEER_GO_DIR/go.tar.gz"
+tar -xzf "$ONDERZEEER_GO_DIR/go.tar.gz" \
+  -C "$ONDERZEEER_GO_DIR/toolchain" \
   --strip-components=1
 
-export PATH="$SLIPWAY_GO_DIR/toolchain/bin:$PATH"
-export GOPATH="$SLIPWAY_GO_DIR/gopath"
-export GOMODCACHE="$SLIPWAY_GO_DIR/modcache"
-export GOCACHE="$SLIPWAY_GO_DIR/buildcache"
+export PATH="$ONDERZEEER_GO_DIR/toolchain/bin:$PATH"
+export GOPATH="$ONDERZEEER_GO_DIR/gopath"
+export GOMODCACHE="$ONDERZEEER_GO_DIR/modcache"
+export GOCACHE="$ONDERZEEER_GO_DIR/buildcache"
 
 go version
 go mod download
@@ -735,15 +735,15 @@ go mod download
 artifacts. You do not need to set `GOROOT`; the Go binary discovers its own
 toolchain directory. These exports affect only the current shell.
 
-For Linux on ARM64, set `SLIPWAY_GO_ARCH=arm64`.
+For Linux on ARM64, set `ONDERZEEER_GO_ARCH=arm64`.
 
 To remove the temporary toolchain and caches when you are finished:
 
 ```bash
-if [ -n "${SLIPWAY_GO_DIR:-}" ] && [ -d "$SLIPWAY_GO_DIR" ]; then
-  rm -rf -- "$SLIPWAY_GO_DIR"
+if [ -n "${ONDERZEEER_GO_DIR:-}" ] && [ -d "$ONDERZEEER_GO_DIR" ]; then
+  rm -rf -- "$ONDERZEEER_GO_DIR"
 fi
-unset SLIPWAY_GO_DIR SLIPWAY_GO_VERSION SLIPWAY_GO_OS SLIPWAY_GO_ARCH
+unset ONDERZEEER_GO_DIR ONDERZEEER_GO_VERSION ONDERZEEER_GO_OS ONDERZEEER_GO_ARCH
 unset GOPATH GOMODCACHE GOCACHE
 hash -r
 ```
@@ -770,8 +770,8 @@ Or run `make web` to rebuild through Docker.
 
 ```bash
 make
-./bin/slipway version
-./bin/slipwayd version
+./bin/onderzeeer version
+./bin/onderzeeerd version
 ```
 
 ![icon](icon.png)

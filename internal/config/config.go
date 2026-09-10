@@ -1,4 +1,4 @@
-// Package config loads and validates slipway's YAML configuration.
+// Package config loads and validates onderzeeer's YAML configuration.
 package config
 
 import (
@@ -17,14 +17,14 @@ import (
 )
 
 const (
-	defaultDatabasePath = "./slipway.db"
+	defaultDatabasePath = "./onderzeeer.db"
 	defaultRetryDelay   = 10 * time.Second
 	defaultSettleFor    = time.Second
 )
 
 // ExecutorType selects how a pipeline step's host-side executable is chosen.
 // Container executor arguments are passed directly to the selected runtime CLI
-// so slipway does not need to duplicate each runtime's option surface. The
+// so onderzeeer does not need to duplicate each runtime's option surface. The
 // shell executor invokes its program with a script and positional arguments.
 type ExecutorType string
 
@@ -75,7 +75,7 @@ func (d Duration) MarshalYAML() (any, error) {
 	return d.String(), nil
 }
 
-// Config is the complete slipway configuration.
+// Config is the complete onderzeeer configuration.
 type Config struct {
 	Queue    QueueConfig       `yaml:"queue"`
 	Database DatabaseConfig    `yaml:"database"`

@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/GerhardOfRivia/slipway/internal/control"
+	"github.com/GerhardOfRivia/onderzeeer/internal/control"
 )
 
 func TestDaemonStartsWithoutInstances(t *testing.T) {
 	root := t.TempDir()
 	configPath := writePlaceholderRunConfigAt(t, root, "worker.yaml")
-	t.Setenv("SLIPWAY_CONFIG", configPath)
+	t.Setenv("ONDERZEEER_CONFIG", configPath)
 	socket := filepath.Join(root, "control", "daemon.sock")
 	process := launchTestDaemon(t, root, socket)
 	client := control.NewClient(socket)
@@ -59,7 +59,7 @@ func TestDaemonRejectsConfigArguments(t *testing.T) {
 			args := append([]string{"--state-dir", state, "--socket", socket}, test.args...)
 			var stdout, stderr bytes.Buffer
 			code := RunDaemon(args, &stdout, &stderr)
-			want := "slipwayd: does not accept positional arguments; register instances with slipway start <config> [name]\n"
+			want := "onderzeeerd: does not accept positional arguments; register instances with onderzeeer start <config> [name]\n"
 			if code != 2 || stdout.Len() != 0 || stderr.String() != want {
 				t.Fatalf("RunDaemon(%v) = %d, stdout %q, stderr %q; want usage error %q", args, code, stdout.String(), stderr.String(), want)
 			}
@@ -73,7 +73,7 @@ func TestDaemonRejectsConfigArguments(t *testing.T) {
 }
 
 func TestDaemonHelperProcess(t *testing.T) {
-	if os.Getenv("SLIPWAY_DAEMON_HELPER") != "1" {
+	if os.Getenv("ONDERZEEER_DAEMON_HELPER") != "1" {
 		return
 	}
 	for index, arg := range os.Args {

@@ -19,7 +19,7 @@ import type {
   QueueSummary,
 } from './types'
 
-const tokenKey = 'slipway.web.token'
+const tokenKey = 'onderzeeer.web.token'
 type OutputState =
   | { state: 'loading' }
   | { state: 'ready'; output: CommandOutput }
@@ -124,7 +124,7 @@ function TokenGate({
         <p className="eyebrow">Local control plane</p>
         <h1 id="auth-title">Enter the control room.</h1>
         <p className="auth-copy">
-          Paste the access token from the private token file shown in the <code>slipwayd</code> startup log.
+          Paste the access token from the private token file shown in the <code>onderzeeerd</code> startup log.
           It stays in this browser tab only.
         </p>
         <form onSubmit={submit}>
@@ -227,7 +227,7 @@ function Dashboard({
       setRefreshError('')
     } catch (error) {
       if (controller.signal.aborted) return
-      const message = handleError(error, 'Could not refresh slipway')
+      const message = handleError(error, 'Could not refresh onderzeeer')
       if (message) setRefreshError(message)
     } finally {
       if (overviewController.current === controller) overviewController.current = null
@@ -419,7 +419,7 @@ function Dashboard({
   }
 
   const performAction = async (kind: 'start' | 'stop', id: string) => {
-    if (kind === 'stop' && !window.confirm('Stop this slipway instance gracefully?')) return
+    if (kind === 'stop' && !window.confirm('Stop this onderzeeer instance gracefully?')) return
     setActionID(id)
     setActionError('')
     try {
@@ -462,7 +462,7 @@ function Dashboard({
         <div className="brand-lockup">
           <img className="brand-mark brand-mark-small" src="/icon.png" alt="" />
           <div>
-            <strong>slipway</strong>
+            <strong>onderzeeer</strong>
             <span className="daemon-version">Version {version === null ? 'loading…' : version || 'unavailable'}</span>
           </div>
         </div>
@@ -513,7 +513,7 @@ function Dashboard({
             {queues === null ? (
               <DashboardSkeleton />
             ) : queues.length === 0 ? (
-              <EmptyState title="No queues registered" copy="Register a config with slipway start. Its queue and instance will remain available after daemon restarts." />
+              <EmptyState title="No queues registered" copy="Register a config with onderzeeer start. Its queue and instance will remain available after daemon restarts." />
             ) : (
               <section className="queue-workspace">
                 <QueueRail

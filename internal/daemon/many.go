@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/GerhardOfRivia/slipway/internal/config"
+	"github.com/GerhardOfRivia/onderzeeer/internal/config"
 )
 
 // NamedConfig associates a loaded configuration with the path used to load it.

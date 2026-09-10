@@ -21,52 +21,52 @@ wget http://plates.openalpr.com/h786poj.jpg -P image/
 Test the demo in the foreground:
 
 ```bash
-./bin/slipway test slipway.yaml
+./bin/onderzeeer test onderzeeer.yaml
 ```
 
-`slipway test` runs locally in the foreground with its own queue database.
+`onderzeeer test` runs locally in the foreground with its own queue database.
 Press Ctrl-C to stop it gracefully.
 
-If you run slipway before making the image directory it will fail because the sqlite db
-is stored there see `slipway.yaml:database.path`
+If you run onderzeeer before making the image directory it will fail because the sqlite db
+is stored there see `onderzeeer.yaml:database.path`
 
 `test` takes only the config path; no instance name is required.
 
 ## daemon-managed
 
-To run the demo in the background, start `slipwayd` in one terminal and
+To run the demo in the background, start `onderzeeerd` in one terminal and
 then use the management commands from another:
 
 ### start
 
 ```bash
-slipway start slipway.yaml
+onderzeeer start onderzeeer.yaml
 ```
 
 The daemon assigns its own queue database and remembers this instance across
-restarts. `slipway stop demo` stops it persistently; `slipway start demo` resumes
+restarts. `onderzeeer stop demo` stops it persistently; `onderzeeer start demo` resumes
 the saved configuration. Note the name defaults to the config basename.
 
 ### ps
 
 ```sh
-slipway ps
+onderzeeer ps
 ```
 
 ```txt
 ID            NAME     STATUS   STARTED                         CONFIG
-0d191360f434  slipway  running  2026-09-10T05:04:46.187041365Z  "/home/g/git/slipway/demo/slipway.yaml"
+0d191360f434  onderzeeer  running  2026-09-10T05:04:46.187041365Z  "/home/g/git/onderzeeer/demo/onderzeeer.yaml"
 ```
 
 ### status
 
 ```sh
-slipway status slipway
+onderzeeer status onderzeeer
 ```
 
 ```txt
-CONFIG     /home/g/git/slipway/demo/slipway.yaml
-DATABASE   /home/g/git/slipway/demo/config/queues/0d191360f434.sqlite
+CONFIG     /home/g/git/onderzeeer/demo/onderzeeer.yaml
+DATABASE   /home/g/git/onderzeeer/demo/config/queues/0d191360f434.sqlite
 TOTAL      1
 QUEUED     0
 RUNNING    0
@@ -77,7 +77,7 @@ FAILED     0
 ### queue
 
 ```sh
-slipway queue slipway
+onderzeeer queue onderzeeer
 ```
 
 ```txt
@@ -87,26 +87,26 @@ ID  STATUS  WATCH  ATTEMPT  AVAILABLE  PATH
 ### jobs
 
 ```sh
-slipway jobs slipway
+onderzeeer jobs onderzeeer
 ```
 
 ```txt
 ID  STATUS     WATCH          ATTEMPT  AVAILABLE  PATH
-1   SUCCEEDED  demo-openalpr  1/4      -          "/home/g/git/slipway/demo/image/h786poj.jpg"
+1   SUCCEEDED  demo-openalpr  1/4      -          "/home/g/git/onderzeeer/demo/image/h786poj.jpg"
 ```
 
 ### job
 
 ```sh
-slipway job slipway 1
+onderzeeer job onderzeeer 1
 ```
 
 ```txt
 Job 1
 Status:       SUCCEEDED
 Watch:        demo-openalpr
-File:         "/home/g/git/slipway/demo/image/h786poj.jpg"
-Fingerprint:  slipway:path
+File:         "/home/g/git/onderzeeer/demo/image/h786poj.jpg"
+Fingerprint:  onderzeeer:path
 Attempts:     1/4
 Available:    2026-09-10T05:04:49.321304899Z
 Created:      2026-09-10T05:04:49.321304899Z
@@ -114,16 +114,16 @@ Updated:      2026-09-10T05:04:52.580662974Z
 
 Runs
   Run 1 (id=1)  SUCCEEDED  started=2026-09-10T05:04:49.341697806Z  finished=2026-09-10T05:04:52.580662974Z
-    Command 1 (id=1)  SUCCEEDED  "docker" ["run","--rm","--mount","type=bind,source=/home/g/git/slipway/demo/image,target=/data,ro","openalpr/openalpr:latest","--json","--country","eu","/data/h786poj.jpg"]
+    Command 1 (id=1)  SUCCEEDED  "docker" ["run","--rm","--mount","type=bind,source=/home/g/git/onderzeeer/demo/image,target=/data,ro","openalpr/openalpr:latest","--json","--country","eu","/data/h786poj.jpg"]
       started=2026-09-10T05:04:49.344310933Z  finished=2026-09-10T05:04:52.572889883Z  exit=0  timeout=15m0s
-    Command 2 (id=2)  SUCCEEDED  "/usr/bin/rm" ["/home/g/git/slipway/demo/image/h786poj.jpg"]
+    Command 2 (id=2)  SUCCEEDED  "/usr/bin/rm" ["/home/g/git/onderzeeer/demo/image/h786poj.jpg"]
       started=2026-09-10T05:04:52.573860517Z  finished=2026-09-10T05:04:52.579859615Z  exit=0  timeout=15m0s
 ```
 
 ### logs
 
 ```sh
-slipway logs slipway 1
+onderzeeer logs onderzeeer 1
 ```
 
 ```txt

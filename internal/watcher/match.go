@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/GerhardOfRivia/slipway/internal/config"
+	"github.com/GerhardOfRivia/onderzeeer/internal/config"
 )
 
 // Match reports whether filename is selected by a watch. Patterns without a

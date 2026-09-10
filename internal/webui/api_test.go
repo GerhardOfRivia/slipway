@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/GerhardOfRivia/slipway/internal/config"
-	"github.com/GerhardOfRivia/slipway/internal/control"
-	"github.com/GerhardOfRivia/slipway/internal/queue"
+	"github.com/GerhardOfRivia/onderzeeer/internal/config"
+	"github.com/GerhardOfRivia/onderzeeer/internal/control"
+	"github.com/GerhardOfRivia/onderzeeer/internal/queue"
 )
 
 func newHandler(manager *control.Manager, logger *slog.Logger, token, version string) (http.Handler, error) {
@@ -150,7 +150,7 @@ func TestQueueAPIMutationsRequireSameOriginAndRetainStoppedQueue(t *testing.T) {
 	}
 	request.Header.Set("Authorization", "Bearer "+testWebToken)
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("X-slipway-Web", "1")
+	request.Header.Set("X-onderzeeer-Web", "1")
 	request.Header.Set("Origin", "http://evil.example")
 	response, err := server.Client().Do(request)
 	if err != nil {
@@ -352,7 +352,7 @@ func webMutation(t *testing.T, server *httptest.Server, path string) *http.Respo
 	}
 	request.Header.Set("Authorization", "Bearer "+testWebToken)
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("X-slipway-Web", "1")
+	request.Header.Set("X-onderzeeer-Web", "1")
 	request.Header.Set("Origin", server.URL)
 	response, err := server.Client().Do(request)
 	if err != nil {

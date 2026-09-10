@@ -1,4 +1,4 @@
-// Package control supervises independently running slipway configurations.
+// Package control supervises independently running onderzeeer configurations.
 //
 // It deliberately contains no transport or CLI concerns. Callers can expose a
 // Manager over a Unix socket, HTTP, or another local control plane.
@@ -10,10 +10,10 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/GerhardOfRivia/slipway/internal/config"
+	"github.com/GerhardOfRivia/onderzeeer/internal/config"
 )
 
-// State is the lifecycle state of a managed slipway instance.
+// State is the lifecycle state of a managed onderzeeer instance.
 type State string
 
 const (

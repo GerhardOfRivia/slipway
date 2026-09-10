@@ -208,7 +208,7 @@ watches:
 func TestLoadResolvesPathsAfterReusableValueExpansion(t *testing.T) {
 	configDirectory := t.TempDir()
 	absoluteRoot := filepath.Join(t.TempDir(), "absolute-root")
-	filename := filepath.Join(configDirectory, "slipway.yaml")
+	filename := filepath.Join(configDirectory, "onderzeeer.yaml")
 	contents := fmt.Sprintf(`
 values:
   absolute_root: %q

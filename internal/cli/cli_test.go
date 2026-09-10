@@ -10,14 +10,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/GerhardOfRivia/slipway/internal/queue"
+	"github.com/GerhardOfRivia/onderzeeer/internal/queue"
 )
 
 func TestInspectionCommands(t *testing.T) {
 	t.Parallel()
 	directory := t.TempDir()
-	configPath := filepath.Join(directory, "slipway.yaml")
-	databasePath := filepath.Join(directory, "slipway.db")
+	configPath := filepath.Join(directory, "onderzeeer.yaml")
+	databasePath := filepath.Join(directory, "onderzeeer.db")
 	watchPath := filepath.Join(directory, "incoming")
 	if err := os.Mkdir(watchPath, 0o700); err != nil {
 		t.Fatal(err)
@@ -138,10 +138,10 @@ func TestRunUsageErrors(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	if code := Run([]string{"--help"}, &stdout, &stderr); code != 0 || !strings.Contains(stdout.String(), "slipway test") {
+	if code := Run([]string{"--help"}, &stdout, &stderr); code != 0 || !strings.Contains(stdout.String(), "onderzeeer test") {
 		t.Fatalf("help code/output = %d %q", code, stdout.String())
 	}
-	if strings.Contains(stdout.String(), "slipway daemon") {
+	if strings.Contains(stdout.String(), "onderzeeer daemon") {
 		t.Fatalf("help still advertises removed daemon command: %q", stdout.String())
 	}
 
@@ -150,7 +150,7 @@ func TestRunUsageErrors(t *testing.T) {
 	if code := Run([]string{"daemon"}, &stdout, &stderr); code != 2 {
 		t.Fatalf("removed daemon command exit code = %d, want 2", code)
 	}
-	if !strings.Contains(stderr.String(), `slipway: unknown command "daemon"`) {
+	if !strings.Contains(stderr.String(), `onderzeeer: unknown command "daemon"`) {
 		t.Fatalf("removed daemon command stderr = %q", stderr.String())
 	}
 }
@@ -158,12 +158,12 @@ func TestRunUsageErrors(t *testing.T) {
 func TestConfigCommandsRequireExplicitConfig(t *testing.T) {
 	directory := t.TempDir()
 	t.Chdir(directory)
-	for _, name := range []string{"slipway", "slipway.yaml", "environment.yaml"} {
+	for _, name := range []string{"onderzeeer", "onderzeeer.yaml", "environment.yaml"} {
 		if err := os.WriteFile(name, []byte("watches: []\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
-	t.Setenv("SLIPWAY_CONFIG", filepath.Join(directory, "environment.yaml"))
+	t.Setenv("ONDERZEEER_CONFIG", filepath.Join(directory, "environment.yaml"))
 	for _, command := range []string{"check", "test", "start", "status", "queue", "jobs", "job", "logs"} {
 		for _, configArgs := range [][]string{nil, {""}, {" \t"}} {
 			args := append([]string{command}, configArgs...)
@@ -175,7 +175,7 @@ func TestConfigCommandsRequireExplicitConfig(t *testing.T) {
 			}
 			var stdout, stderr bytes.Buffer
 			code := Run(args, &stdout, &stderr)
-			if code != 2 || stdout.Len() != 0 || stderr.String() != "slipway: config path is required\n" {
+			if code != 2 || stdout.Len() != 0 || stderr.String() != "onderzeeer: config path is required\n" {
 				t.Errorf("Run(%v) = %d, stdout %q, stderr %q; want required config usage error", args, code, stdout.String(), stderr.String())
 			}
 		}
@@ -189,7 +189,7 @@ func TestVersionOption(t *testing.T) {
 		if code := RunVersion(args, &stdout, &stderr, "1.2.3-test"); code != 0 {
 			t.Fatalf("RunVersion(%v) code = %d, stderr = %q", args, code, stderr.String())
 		}
-		if got, want := stdout.String(), "slipway 1.2.3-test\n"; got != want {
+		if got, want := stdout.String(), "onderzeeer 1.2.3-test\n"; got != want {
 			t.Errorf("RunVersion(%v) output = %q, want %q", args, got, want)
 		}
 	}

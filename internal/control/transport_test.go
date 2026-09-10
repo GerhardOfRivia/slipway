@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/GerhardOfRivia/slipway/internal/config"
+	"github.com/GerhardOfRivia/onderzeeer/internal/config"
 )
 
 func TestUnixHTTPStartListStop(t *testing.T) {
@@ -493,7 +493,7 @@ func TestNewServerReplacesStaleUnixSocket(t *testing.T) {
 	t.Parallel()
 
 	root := privateTransportTempDir(t)
-	socketPath := filepath.Join(root, "slipway.sock")
+	socketPath := filepath.Join(root, "onderzeeer.sock")
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: socketPath, Net: "unix"})
 	if err != nil {
 		t.Fatal(err)
@@ -520,7 +520,7 @@ func TestNewServerReplacesStaleUnixSocket(t *testing.T) {
 func TestNewServerRefusesToReplaceRegularFile(t *testing.T) {
 	t.Parallel()
 
-	socketPath := filepath.Join(privateTransportTempDir(t), "slipway.sock")
+	socketPath := filepath.Join(privateTransportTempDir(t), "onderzeeer.sock")
 	contents := []byte("do not replace")
 	if err := os.WriteFile(socketPath, contents, 0o600); err != nil {
 		t.Fatal(err)
@@ -542,7 +542,7 @@ func TestNewServerRefusesToReplaceRegularFile(t *testing.T) {
 func TestNewServerRejectsDuplicateServer(t *testing.T) {
 	t.Parallel()
 
-	socketPath := filepath.Join(privateTransportTempDir(t), "slipway.sock")
+	socketPath := filepath.Join(privateTransportTempDir(t), "onderzeeer.sock")
 	first, err := NewServer(socketPath, newIdleTransportManager(t), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -575,7 +575,7 @@ func TestServerCloseRetainsOwnershipUntilInstancesStop(t *testing.T) {
 	t.Parallel()
 
 	root := privateTransportTempDir(t)
-	socketPath := filepath.Join(root, "slipway.sock")
+	socketPath := filepath.Join(root, "onderzeeer.sock")
 	configPath := filepath.Join(root, "worker.yaml")
 	runnerStarted := make(chan struct{})
 	runnerCanceled := make(chan struct{})
@@ -653,7 +653,7 @@ func TestNewServerProtectsAndCleansUpSocket(t *testing.T) {
 	t.Parallel()
 
 	socketDirectory := filepath.Join(t.TempDir(), "private-control")
-	socketPath := filepath.Join(socketDirectory, "slipway.sock")
+	socketPath := filepath.Join(socketDirectory, "onderzeeer.sock")
 	server, err := NewServer(socketPath, newIdleTransportManager(t), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -695,7 +695,7 @@ func TestServerServeCancellationShutsDownRuntimes(t *testing.T) {
 
 	root := privateTransportTempDir(t)
 	configPath := filepath.Join(root, "shutdown.yaml")
-	socketPath := filepath.Join(root, "slipway.sock")
+	socketPath := filepath.Join(root, "onderzeeer.sock")
 	runnerStarted := make(chan struct{})
 	runnerStopped := make(chan struct{})
 	manager := newTestManager(t, Options{
@@ -763,7 +763,7 @@ func TestServerServeCancellationShutsDownRuntimes(t *testing.T) {
 func newUnixTransportHarness(t *testing.T, options Options) (*Manager, *Client, string) {
 	t.Helper()
 	manager := newTestManager(t, options)
-	socketPath := filepath.Join(t.TempDir(), "control", "slipway.sock")
+	socketPath := filepath.Join(t.TempDir(), "control", "onderzeeer.sock")
 	server, err := NewServer(socketPath, manager, nil)
 	if err != nil {
 		t.Fatal(err)

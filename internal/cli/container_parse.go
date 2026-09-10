@@ -6,7 +6,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/GerhardOfRivia/slipway/internal/config"
+	"github.com/GerhardOfRivia/onderzeeer/internal/config"
 )
 
 type structuredContainerRun struct {

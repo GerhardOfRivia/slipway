@@ -167,7 +167,7 @@ func fingerprintTestConfig(environment, containerEnvironment map[string]string) 
 			MaxRetries: 3,
 			RetryDelay: Duration{Duration: 10 * time.Second},
 		},
-		Database: DatabaseConfig{Path: "/var/lib/slipway/queue.db"},
+		Database: DatabaseConfig{Path: "/var/lib/onderzeeer/queue.db"},
 		Watches: []WatchConfig{{
 			Name:              "incoming",
 			Path:              "/srv/incoming",
@@ -187,7 +187,7 @@ func fingerprintTestConfig(environment, containerEnvironment map[string]string) 
 				Command:       "/app/process",
 				CommandArgs:   []string{"--input", "/data/input.csv"},
 				Timeout:       Duration{Duration: time.Minute},
-				WorkingDir:    "/var/tmp/slipway",
+				WorkingDir:    "/var/tmp/onderzeeer",
 				Output:        "result.json",
 				Env:           environment,
 			}},

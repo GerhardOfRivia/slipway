@@ -1,4 +1,4 @@
-// Package webui exposes slipway's optional web dashboard.
+// Package webui exposes onderzeeer's optional web dashboard.
 package webui
 
 import (
@@ -20,7 +20,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/GerhardOfRivia/slipway/internal/control"
+	"github.com/GerhardOfRivia/onderzeeer/internal/control"
 )
 
 const shutdownTimeout = 5 * time.Second
@@ -45,7 +45,7 @@ type Server struct {
 
 // NewServer acquires address immediately and constructs a web server. The
 // address must contain an explicit loopback or wildcard host and TCP port.
-// version is the running slipwayd build version displayed by the dashboard.
+// version is the running onderzeeerd build version displayed by the dashboard.
 func NewServer(address, tokenPath, version string, manager *control.Manager, logger *slog.Logger) (*Server, error) {
 	if manager == nil {
 		return nil, errors.New("webui: manager is required")
@@ -122,7 +122,7 @@ func writeAccessToken(filename string) (string, error) {
 		return "", fmt.Errorf("webui: generate access token: %w", err)
 	}
 	token := base64.RawURLEncoding.EncodeToString(bytes)
-	temporary, err := os.CreateTemp(directory, ".slipway-web-token-*")
+	temporary, err := os.CreateTemp(directory, ".onderzeeer-web-token-*")
 	if err != nil {
 		return "", fmt.Errorf("webui: create temporary token: %w", err)
 	}
@@ -322,8 +322,8 @@ func requireAPIAuth(token string, next http.Handler) http.Handler {
 			provided := strings.TrimPrefix(request.Header.Get("Authorization"), "Bearer ")
 			if provided == request.Header.Get("Authorization") ||
 				subtle.ConstantTimeCompare([]byte(provided), []byte(token)) != 1 {
-				output.Header().Set("WWW-Authenticate", `Bearer realm="slipway-web"`)
-				writeAPIError(output, http.StatusUnauthorized, "unauthorized", "A valid slipway web token is required")
+				output.Header().Set("WWW-Authenticate", `Bearer realm="onderzeeer-web"`)
+				writeAPIError(output, http.StatusUnauthorized, "unauthorized", "A valid onderzeeer web token is required")
 				return
 			}
 		}

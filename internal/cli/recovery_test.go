@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/GerhardOfRivia/slipway/internal/control"
-	"github.com/GerhardOfRivia/slipway/internal/queue"
+	"github.com/GerhardOfRivia/onderzeeer/internal/control"
+	"github.com/GerhardOfRivia/onderzeeer/internal/queue"
 )
 
 type testDaemonProcess struct {
@@ -33,7 +33,7 @@ func launchTestDaemon(t *testing.T, root, socket string) *testDaemonProcess {
 	args := []string{"-test.run=^TestDaemonHelperProcess$", "--", "--socket", socket,
 		"--state-dir", filepath.Join(root, "state"), "--web-listen", ""}
 	process.command = exec.Command(executable, args...)
-	process.command.Env = append(os.Environ(), "SLIPWAY_DAEMON_HELPER=1")
+	process.command.Env = append(os.Environ(), "ONDERZEEER_DAEMON_HELPER=1")
 	process.command.Stdout, process.command.Stderr = &process.logs, &process.logs
 	if err := process.command.Start(); err != nil {
 		t.Fatal(err)
@@ -216,7 +216,7 @@ func TestTestCommandDoesNotUseAvailableDaemon(t *testing.T) {
 	root := t.TempDir()
 	socket := filepath.Join(root, "control", "daemon.sock")
 	process := launchTestDaemon(t, root, socket)
-	t.Setenv("SLIPWAY_SOCKET", socket)
+	t.Setenv("ONDERZEEER_SOCKET", socket)
 	path := writePlaceholderRunConfigAt(t, root, "foreground.yaml")
 	contents, err := os.ReadFile(path)
 	if err != nil {

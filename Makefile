@@ -1,8 +1,8 @@
 # OUTPUT remains an alias for the client path for compatibility with existing
 # build invocations.
 OUTPUT ?= bin
-SLIPWAY_OUTPUT ?= $(OUTPUT)/slipway
-SLIPWAYD_OUTPUT ?= $(OUTPUT)/slipwayd
+ONDERZEEER_OUTPUT ?= $(OUTPUT)/onderzeeer
+ONDERZEEERD_OUTPUT ?= $(OUTPUT)/onderzeeerd
 SEMVER ?= 1.1.1
 VERSION ?= $(SEMVER)-dev
 RELEASE_TAG ?= v$(SEMVER)
@@ -18,32 +18,32 @@ activate:
 	source activate
 
 build-linux-amd64:
-	$(MAKE) build GOOS=linux GOARCH=amd64 CGO_ENABLED=0 SLIPWAY_OUTPUT=bin/slipway-linux-amd64 SLIPWAYD_OUTPUT=bin/slipwayd-linux-amd64
+	$(MAKE) build GOOS=linux GOARCH=amd64 CGO_ENABLED=0 ONDERZEEER_OUTPUT=bin/onderzeeer-linux-amd64 ONDERZEEERD_OUTPUT=bin/onderzeeerd-linux-amd64
 
 build-linux-arm64:
-	$(MAKE) build GOOS=linux GOARCH=arm64 CGO_ENABLED=0 SLIPWAY_OUTPUT=bin/slipway-linux-arm64 SLIPWAYD_OUTPUT=bin/slipwayd-linux-arm64
+	$(MAKE) build GOOS=linux GOARCH=arm64 CGO_ENABLED=0 ONDERZEEER_OUTPUT=bin/onderzeeer-linux-arm64 ONDERZEEERD_OUTPUT=bin/onderzeeerd-linux-arm64
 
 build:
-	@echo "Building $(SLIPWAY_OUTPUT) for $(GOOS)/$(GOARCH) with version $(VERSION)..."
-	mkdir -p $(dir $(SLIPWAY_OUTPUT))
-	GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(LDFLAGS) -o $(SLIPWAY_OUTPUT) ./cmd/slipway
-	@echo "Building $(SLIPWAYD_OUTPUT) for $(GOOS)/$(GOARCH) with version $(VERSION)..."
-	mkdir -p $(dir $(SLIPWAYD_OUTPUT))
-	GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(LDFLAGS) -o $(SLIPWAYD_OUTPUT) ./cmd/slipwayd
+	@echo "Building $(ONDERZEEER_OUTPUT) for $(GOOS)/$(GOARCH) with version $(VERSION)..."
+	mkdir -p $(dir $(ONDERZEEER_OUTPUT))
+	GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(LDFLAGS) -o $(ONDERZEEER_OUTPUT) ./cmd/onderzeeer
+	@echo "Building $(ONDERZEEERD_OUTPUT) for $(GOOS)/$(GOARCH) with version $(VERSION)..."
+	mkdir -p $(dir $(ONDERZEEERD_OUTPUT))
+	GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(LDFLAGS) -o $(ONDERZEEERD_OUTPUT) ./cmd/onderzeeerd
 
 build-docker:
 	docker build --pull \
-	--build-arg SLIPWAY_UID="$(id -u)" \
-	--build-arg SLIPWAY_GID="$(id -g)" \
+	--build-arg ONDERZEEER_UID="$(id -u)" \
+	--build-arg ONDERZEEER_GID="$(id -g)" \
 	--build-arg VERSION="$(git describe --tags --always --dirty)" \
-	-t localhost/slipway:local .
+	-t localhost/onderzeeer:local .
 
 build-podman:
 	podman build --pull=always --format docker \
-	--build-arg SLIPWAY_UID="$(id -u)" \
-	--build-arg SLIPWAY_GID="$(id -g)" \
+	--build-arg ONDERZEEER_UID="$(id -u)" \
+	--build-arg ONDERZEEER_GID="$(id -g)" \
 	--build-arg VERSION="$(git describe --tags --always --dirty)" \
-	-t localhost/slipway:local .
+	-t localhost/onderzeeer:local .
 
 web:
 	# npm ci && npm run build
@@ -64,4 +64,4 @@ release:
 
 clean:
 	@echo "Cleaning up..."
-	rm -f $(SLIPWAY_OUTPUT) $(SLIPWAYD_OUTPUT)
+	rm -f $(ONDERZEEER_OUTPUT) $(ONDERZEEERD_OUTPUT)

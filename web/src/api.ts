@@ -26,7 +26,7 @@ async function request<T>(path: string, token: string, init?: RequestInit): Prom
   headers.set('Accept', 'application/json')
   if (init?.method === 'POST') {
     headers.set('Content-Type', 'application/json')
-    headers.set('X-slipway-Web', '1')
+    headers.set('X-onderzeeer-Web', '1')
   }
 
   const response = await fetch(path, { ...init, headers })

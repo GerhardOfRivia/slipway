@@ -1,4 +1,4 @@
-// Package cli implements slipway's management command line interface.
+// Package cli implements onderzeeer's management command line interface.
 package cli
 
 import (
@@ -15,8 +15,8 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/GerhardOfRivia/slipway/internal/config"
-	"github.com/GerhardOfRivia/slipway/internal/queue"
+	"github.com/GerhardOfRivia/onderzeeer/internal/config"
+	"github.com/GerhardOfRivia/onderzeeer/internal/queue"
 )
 
 type usageError struct {
@@ -77,10 +77,10 @@ func RunVersion(args []string, stdout, stderr io.Writer, version string) int {
 		return 0
 	case "version", "-v", "-version", "--version":
 		if len(args) != 1 {
-			fmt.Fprintln(stderr, "slipway: version does not accept arguments")
+			fmt.Fprintln(stderr, "onderzeeer: version does not accept arguments")
 			return 2
 		}
-		fmt.Fprintf(stdout, "slipway %s\n", version)
+		fmt.Fprintf(stdout, "onderzeeer %s\n", version)
 		return 0
 	case "check":
 		err = checkCommand(args[1:], stdout, stderr)
@@ -105,7 +105,7 @@ func RunVersion(args []string, stdout, stderr io.Writer, version string) int {
 	case "logs":
 		err = logsCommand(args[1:], stdout, stderr)
 	default:
-		fmt.Fprintf(stderr, "slipway: unknown command %q\n\n", args[0])
+		fmt.Fprintf(stderr, "onderzeeer: unknown command %q\n\n", args[0])
 		printUsage(stderr)
 		return 2
 	}
@@ -114,15 +114,15 @@ func RunVersion(args []string, stdout, stderr io.Writer, version string) int {
 	}
 	var usage usageError
 	if errors.As(err, &usage) {
-		fmt.Fprintln(stderr, "slipway:", usage.message)
+		fmt.Fprintln(stderr, "onderzeeer:", usage.message)
 		return 2
 	}
-	fmt.Fprintln(stderr, "slipway:", err)
+	fmt.Fprintln(stderr, "onderzeeer:", err)
 	return 1
 }
 
 func statusCommand(args []string, stdout, stderr io.Writer) error {
-	flags := newFlagSet("status", stderr, "slipway status <config>")
+	flags := newFlagSet("status", stderr, "onderzeeer status <config>")
 	inspection := inspectionFlags(flags)
 	if err := parseFlags(flags, args); err != nil {
 		return err
@@ -175,7 +175,7 @@ func statusCommand(args []string, stdout, stderr io.Writer) error {
 }
 
 func queueCommand(args []string, stdout, stderr io.Writer) error {
-	flags := newFlagSet("queue", stderr, "slipway queue <config> [--watch name] [--limit n]")
+	flags := newFlagSet("queue", stderr, "onderzeeer queue <config> [--watch name] [--limit n]")
 	inspection := inspectionFlags(flags)
 	watchName := flags.String("watch", "", "filter by watch name")
 	limit := flags.Int("limit", 100, "maximum jobs to display")
@@ -216,7 +216,7 @@ func queueCommand(args []string, stdout, stderr io.Writer) error {
 }
 
 func jobsCommand(args []string, stdout, stderr io.Writer) error {
-	flags := newFlagSet("jobs", stderr, "slipway jobs <config> [--status status] [--watch name] [--limit n]")
+	flags := newFlagSet("jobs", stderr, "onderzeeer jobs <config> [--status status] [--watch name] [--limit n]")
 	inspection := inspectionFlags(flags)
 	statusText := flags.String("status", "", "queued, running, succeeded, or failed")
 	watchName := flags.String("watch", "", "filter by watch name")
@@ -261,7 +261,7 @@ func jobsCommand(args []string, stdout, stderr io.Writer) error {
 }
 
 func jobCommand(args []string, stdout, stderr io.Writer) error {
-	flags := newFlagSet("job", stderr, "slipway job <config> <id>")
+	flags := newFlagSet("job", stderr, "onderzeeer job <config> <id>")
 	inspection := inspectionFlags(flags)
 	if err := parseFlags(flags, args); err != nil {
 		return err
@@ -320,7 +320,7 @@ func jobCommand(args []string, stdout, stderr io.Writer) error {
 }
 
 func logsCommand(args []string, stdout, stderr io.Writer) error {
-	flags := newFlagSet("logs", stderr, "slipway logs <config> <id>")
+	flags := newFlagSet("logs", stderr, "onderzeeer logs <config> <id>")
 	inspection := inspectionFlags(flags)
 	if err := parseFlags(flags, args); err != nil {
 		return err
@@ -484,16 +484,16 @@ func newFlagSet(name string, output io.Writer, usage string) *flag.FlagSet {
 		flags.PrintDefaults()
 		switch name {
 		case "start", "ps", "stop":
-			fmt.Fprintln(output, "\nRequires a running slipwayd. Start it separately with: slipwayd")
+			fmt.Fprintln(output, "\nRequires a running onderzeeerd. Start it separately with: onderzeeerd")
 		case "test":
-			fmt.Fprintln(output, "\nRuns in the foreground with its own queue database. Does not contact slipwayd.")
+			fmt.Fprintln(output, "\nRuns in the foreground with its own queue database. Does not contact onderzeeerd.")
 		case "check", "parse":
-			fmt.Fprintln(output, "\nNo slipwayd required. Does not contact the daemon or execute pipeline commands.")
+			fmt.Fprintln(output, "\nNo onderzeeerd required. Does not contact the daemon or execute pipeline commands.")
 		case "status", "queue", "jobs", "job", "logs":
-			fmt.Fprintln(output, "\nSelect a managed instance by name, ID, or config path. Requires slipwayd.")
+			fmt.Fprintln(output, "\nSelect a managed instance by name, ID, or config path. Requires onderzeeerd.")
 			fmt.Fprintln(output, "Use --local with a config path to inspect a standalone run's database.")
-		case "slipwayd":
-			fmt.Fprintln(output, "\nStarts the daemon; no existing slipwayd is required.")
+		case "onderzeeerd":
+			fmt.Fprintln(output, "\nStarts the daemon; no existing onderzeeerd is required.")
 		}
 	}
 	return flags
@@ -666,25 +666,24 @@ func writeLog(output io.Writer, value string) {
 }
 
 func printUsage(output io.Writer) {
-	fmt.Fprintln(output, `slipway watches files and runs durable command pipelines.
+	fmt.Fprintln(output, `onderzeeer watches files and runs durable command pipelines.
 
 Usage:
 
-No slipwayd required:
-  slipway version
-  slipway check [--raw] <config>
-  slipway parse [--name name] -- <program> [argument ...]
-  slipway test <config>
+No onderzeeerd required:
+  onderzeeer version
+  onderzeeer check [--raw] <config>
+  onderzeeer parse [--name name] -- <program> [argument ...]
+  onderzeeer test <config>
 
-Requires a running slipwayd:
-  slipway start <config-or-instance> [name] [--socket path]
-  slipway ps [--all] [--socket path]
-  slipway stop [--socket path] <id-or-name> [id-or-name ...]
-  slipway status <instance-or-config> [--socket path]
-  slipway queue <instance-or-config> [--socket path]
-  slipway jobs <instance-or-config> [--status status] [--watch name] [--socket path]
-  slipway job <instance-or-config> <id> [--socket path]
-  slipway logs <instance-or-config> <id> [--socket path]
-  Start the daemon separately with: slipwayd
-`)
+Requires a running onderzeeerd:
+  onderzeeer start <config-or-instance> [name] [--socket path]
+  onderzeeer ps [--all] [--socket path]
+  onderzeeer stop [--socket path] <id-or-name> [id-or-name ...]
+  onderzeeer status <instance-or-config> [--socket path]
+  onderzeeer queue <instance-or-config> [--socket path]
+  onderzeeer jobs <instance-or-config> [--status status] [--watch name] [--socket path]
+  onderzeeer job <instance-or-config> <id> [--socket path]
+  onderzeeer logs <instance-or-config> <id> [--socket path]
+  Start the daemon separately with: onderzeeerd`)
 }

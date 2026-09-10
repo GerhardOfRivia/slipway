@@ -151,16 +151,16 @@ func ResolveSocketPath(explicit string) (string, error) {
 	if value := strings.TrimSpace(explicit); value != "" {
 		return filepath.Clean(value), nil
 	}
-	if value := strings.TrimSpace(os.Getenv("SLIPWAY_SOCKET")); value != "" {
+	if value := strings.TrimSpace(os.Getenv("ONDERZEEER_SOCKET")); value != "" {
 		return filepath.Clean(value), nil
 	}
 	if runtimeDirectory := strings.TrimSpace(os.Getenv("XDG_RUNTIME_DIR")); runtimeDirectory != "" {
-		return filepath.Join(runtimeDirectory, "slipway", "slipway.sock"), nil
+		return filepath.Join(runtimeDirectory, "onderzeeer", "onderzeeer.sock"), nil
 	}
 	if cacheDirectory, err := os.UserCacheDir(); err == nil && strings.TrimSpace(cacheDirectory) != "" {
-		return filepath.Join(cacheDirectory, "slipway", "slipway.sock"), nil
+		return filepath.Join(cacheDirectory, "onderzeeer", "onderzeeer.sock"), nil
 	}
-	return filepath.Join(os.TempDir(), fmt.Sprintf("slipway-%d", os.Geteuid()), "slipway.sock"), nil
+	return filepath.Join(os.TempDir(), fmt.Sprintf("onderzeeer-%d", os.Geteuid()), "onderzeeer.sock"), nil
 }
 
 // SocketPath is a convenience wrapper for callers that cannot return a path
@@ -446,7 +446,7 @@ func (server *Server) handleRun(output http.ResponseWriter, request *http.Reques
 	defer attachment.Cancel()
 
 	output.Header().Set("Content-Type", "application/x-ndjson")
-	output.Header().Set("X-slipway-API-Version", apiVersion)
+	output.Header().Set("X-onderzeeer-API-Version", apiVersion)
 	output.WriteHeader(http.StatusOK)
 	encoder := json.NewEncoder(output)
 	if err := encoder.Encode(RunEvent{Type: "started", Instance: instance}); err != nil {
@@ -560,7 +560,7 @@ func writeAPIError(output http.ResponseWriter, status int, code string, err erro
 
 func writeJSON(output http.ResponseWriter, status int, value any) {
 	output.Header().Set("Content-Type", "application/json")
-	output.Header().Set("X-slipway-API-Version", apiVersion)
+	output.Header().Set("X-onderzeeer-API-Version", apiVersion)
 	output.WriteHeader(status)
 	_ = json.NewEncoder(output).Encode(value)
 }

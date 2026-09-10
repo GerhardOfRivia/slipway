@@ -95,7 +95,7 @@ func TestCheckDisplaysConfiguredPipelines(t *testing.T) {
 	t.Parallel()
 
 	directory := t.TempDir()
-	configPath := filepath.Join(directory, "slipway.yaml")
+	configPath := filepath.Join(directory, "onderzeeer.yaml")
 	databasePath := filepath.Join(directory, "never-created.db")
 	configuration := `
 values:
@@ -167,7 +167,7 @@ func TestCheckDisplaysCanonicalExecutorTypes(t *testing.T) {
 	t.Parallel()
 
 	directory := t.TempDir()
-	configPath := filepath.Join(directory, "slipway.yaml")
+	configPath := filepath.Join(directory, "onderzeeer.yaml")
 	configuration := `
 watches:
   - name: mixed
@@ -242,7 +242,7 @@ func TestCheckDisplaysShellExecutorLowering(t *testing.T) {
 	t.Parallel()
 
 	directory := t.TempDir()
-	configPath := filepath.Join(directory, "slipway.yaml")
+	configPath := filepath.Join(directory, "onderzeeer.yaml")
 	configuration := `
 values:
   tool: process-file
@@ -288,8 +288,8 @@ Watch: incoming
 func TestCheckUsesExplicitConfig(t *testing.T) {
 	directory := t.TempDir()
 	t.Chdir(directory)
-	t.Setenv("SLIPWAY_CONFIG", "environment.yaml")
-	for _, name := range []string{"slipway", "slipway.yaml", "environment.yaml"} {
+	t.Setenv("ONDERZEEER_CONFIG", "environment.yaml")
+	for _, name := range []string{"onderzeeer", "onderzeeer.yaml", "environment.yaml"} {
 		if err := os.WriteFile(name, []byte("invalid: implicit config must not load\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -395,7 +395,7 @@ watches:
 	if stdout.Len() != 0 {
 		t.Fatalf("Run(check invalid) stdout = %q, want empty", stdout.String())
 	}
-	for _, want := range []string{"slipway: load " + configPath, "argz"} {
+	for _, want := range []string{"onderzeeer: load " + configPath, "argz"} {
 		if !strings.Contains(stderr.String(), want) {
 			t.Errorf("Run(check invalid) stderr %q does not contain %q", stderr.String(), want)
 		}
@@ -409,7 +409,7 @@ func TestCheckUsageAndHelp(t *testing.T) {
 	if code := Run([]string{"check", "first.yaml", "unexpected"}, &stdout, &stderr); code != 2 {
 		t.Fatalf("Run(check positional) code = %d, want 2", code)
 	}
-	if got, want := stderr.String(), "slipway: check expects 1 positional argument (config path)\n"; got != want {
+	if got, want := stderr.String(), "onderzeeer: check expects 1 positional argument (config path)\n"; got != want {
 		t.Fatalf("Run(check positional) stderr = %q, want %q", got, want)
 	}
 
@@ -418,7 +418,7 @@ func TestCheckUsageAndHelp(t *testing.T) {
 	if code := Run([]string{"check", "--help"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("Run(check --help) code = %d, want 0", code)
 	}
-	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "Usage: slipway check [--raw] <config>") {
+	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "Usage: onderzeeer check [--raw] <config>") {
 		t.Fatalf("Run(check --help) stdout/stderr = %q / %q", stdout.String(), stderr.String())
 	}
 
@@ -427,7 +427,7 @@ func TestCheckUsageAndHelp(t *testing.T) {
 	if code := Run([]string{"--help"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("Run(--help) code = %d, want 0", code)
 	}
-	if !strings.Contains(stdout.String(), "slipway check [--raw] <config>") {
+	if !strings.Contains(stdout.String(), "onderzeeer check [--raw] <config>") {
 		t.Fatalf("Run(--help) output = %q, want check command", stdout.String())
 	}
 }

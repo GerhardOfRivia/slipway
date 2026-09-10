@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/GerhardOfRivia/slipway/internal/control"
+	"github.com/GerhardOfRivia/onderzeeer/internal/control"
 )
 
 func TestServerAllowsWildcardWithWarningAndManagesPrivateToken(t *testing.T) {
@@ -117,7 +117,7 @@ func TestServerAllowsWildcardWithWarningAndManagesPrivateToken(t *testing.T) {
 	if response.StatusCode != http.StatusOK || !strings.HasPrefix(response.Header.Get("Content-Type"), "text/javascript") {
 		t.Fatalf("theme script response = %d headers=%v", response.StatusCode, response.Header)
 	}
-	if !strings.Contains(string(themeScript), "slipway.web.theme") {
+	if !strings.Contains(string(themeScript), "onderzeeer.web.theme") {
 		t.Fatal("theme script response does not include the preference key")
 	}
 	request, err := http.NewRequest(http.MethodPost, "http://"+server.Address()+"/dashboard", strings.NewReader("{}"))

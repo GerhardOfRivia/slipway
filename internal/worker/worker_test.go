@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/GerhardOfRivia/slipway/internal/config"
-	"github.com/GerhardOfRivia/slipway/internal/executor"
-	"github.com/GerhardOfRivia/slipway/internal/queue"
+	"github.com/GerhardOfRivia/onderzeeer/internal/config"
+	"github.com/GerhardOfRivia/onderzeeer/internal/executor"
+	"github.com/GerhardOfRivia/onderzeeer/internal/queue"
 )
 
 func TestProcessJobRunsCommandsSequentiallyAndPersistsHistory(t *testing.T) {
@@ -28,7 +28,7 @@ func TestProcessJobRunsCommandsSequentiallyAndPersistsHistory(t *testing.T) {
 				Name:    "first",
 				Program: "program-one",
 				Args:    []string{"--input", "{{file}}"},
-				Env:     map[string]string{"SLIPWAY_JOB": "{{job_id}}"},
+				Env:     map[string]string{"ONDERZEEER_JOB": "{{job_id}}"},
 			},
 			{
 				Name:       "second",
@@ -66,7 +66,7 @@ func TestProcessJobRunsCommandsSequentiallyAndPersistsHistory(t *testing.T) {
 	if got := store.started[0].Args; !reflect.DeepEqual(got, []string{"--input", job.Path}) {
 		t.Fatalf("first command args = %#v", got)
 	}
-	if got := store.started[0].Env; !reflect.DeepEqual(got, []string{"SLIPWAY_JOB=42"}) {
+	if got := store.started[0].Env; !reflect.DeepEqual(got, []string{"ONDERZEEER_JOB=42"}) {
 		t.Fatalf("first command env = %#v", got)
 	}
 	if got := store.started[1]; got.WorkingDir != "/drop box" || !reflect.DeepEqual(got.Args, []string{"a tricky;name.csv", "a tricky;name", ".csv"}) {
@@ -140,7 +140,7 @@ func TestProcessJobCombinesConfiguredValuesAndJobTemplates(t *testing.T) {
 	t.Parallel()
 
 	directory := t.TempDir()
-	filename := filepath.Join(directory, "slipway.yaml")
+	filename := filepath.Join(directory, "onderzeeer.yaml")
 	configuration := `
 values:
   shared_dir: /srv/shared
@@ -231,7 +231,7 @@ func TestProcessJobUsesConfiguredContainerExecutors(t *testing.T) {
 	t.Parallel()
 
 	directory := t.TempDir()
-	filename := filepath.Join(directory, "slipway.yaml")
+	filename := filepath.Join(directory, "onderzeeer.yaml")
 	configuration := `
 watches:
   - name: incoming
@@ -378,7 +378,7 @@ func TestProcessJobRejectsInvalidExpandedStructuredValues(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			filename := filepath.Join(t.TempDir(), "slipway.yaml")
+			filename := filepath.Join(t.TempDir(), "onderzeeer.yaml")
 			configuration := `
 watches:
   - name: incoming
@@ -584,7 +584,7 @@ func TestFailureOutputSummary(t *testing.T) {
 		{
 			name: "capture truncation marker",
 			result: executor.Result{
-				Stderr: "diagnosis\n\n[slipway: output truncated after 1048576 bytes]\n",
+				Stderr: "diagnosis\n\n[onderzeeer: output truncated after 1048576 bytes]\n",
 			},
 			want: `stderr: "diagnosis"`,
 		},

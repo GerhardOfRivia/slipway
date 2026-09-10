@@ -13,10 +13,10 @@ func TestLoadResolvesPathsRelativeToConfigFile(t *testing.T) {
 	if err := os.Mkdir(configDirectory, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	filename := filepath.Join(configDirectory, "slipway.yaml")
+	filename := filepath.Join(configDirectory, "onderzeeer.yaml")
 	contents := `
 database:
-  path: state/../queue/slipway.db
+  path: state/../queue/onderzeeer.db
 watches:
   - name: incoming
     path: ../incoming/./nested
@@ -59,7 +59,7 @@ watches:
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	wantDatabase, err := CanonicalDatabasePath(filepath.Join(configDirectory, "queue", "slipway.db"))
+	wantDatabase, err := CanonicalDatabasePath(filepath.Join(configDirectory, "queue", "onderzeeer.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestLoadCleansAbsoluteProgramAndWorkingDirectory(t *testing.T) {
 	root := t.TempDir()
 	absoluteProgram := filepath.Join(root, "tools", "..", "bin", "process")
 	absoluteWorkingDirectory := filepath.Join(root, "work", "..", "ready")
-	filename := filepath.Join(root, "slipway.yaml")
+	filename := filepath.Join(root, "onderzeeer.yaml")
 	contents := "watches:\n" +
 		"  - name: incoming\n" +
 		"    path: ./incoming\n" +
@@ -128,7 +128,7 @@ func TestLoadCleansAbsoluteProgramAndWorkingDirectory(t *testing.T) {
 
 func TestLoadResolvesStructuredContainerPaths(t *testing.T) {
 	directory := t.TempDir()
-	filename := filepath.Join(directory, "slipway.yaml")
+	filename := filepath.Join(directory, "onderzeeer.yaml")
 	contents := `
 watches:
   - name: incoming
@@ -213,11 +213,11 @@ func TestCanonicalDatabasePathResolvesExistingSymlinkedParent(t *testing.T) {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
 
-	got, err := CanonicalDatabasePath(filepath.Join(linkedDirectory, "future", "slipway.db"))
+	got, err := CanonicalDatabasePath(filepath.Join(linkedDirectory, "future", "onderzeeer.db"))
 	if err != nil {
 		t.Fatalf("CanonicalDatabasePath() error = %v", err)
 	}
-	want := filepath.Join(realDirectory, "future", "slipway.db")
+	want := filepath.Join(realDirectory, "future", "onderzeeer.db")
 	if got != want {
 		t.Fatalf("CanonicalDatabasePath() = %q, want %q", got, want)
 	}
@@ -271,11 +271,11 @@ func TestCanonicalDatabasePathResolvesChainedDanglingIntermediateSymlinks(t *tes
 		t.Skipf("symlinks unavailable: %v", err)
 	}
 
-	got, err := CanonicalDatabasePath(filepath.Join(first, "nested", "slipway.db"))
+	got, err := CanonicalDatabasePath(filepath.Join(first, "nested", "onderzeeer.db"))
 	if err != nil {
 		t.Fatalf("CanonicalDatabasePath() error = %v", err)
 	}
-	want := filepath.Join(root, "future", "database", "nested", "slipway.db")
+	want := filepath.Join(root, "future", "database", "nested", "onderzeeer.db")
 	if got != want {
 		t.Fatalf("CanonicalDatabasePath() = %q, want chained dangling target %q", got, want)
 	}
@@ -292,7 +292,7 @@ func TestCanonicalDatabasePathRejectsSymlinkLoop(t *testing.T) {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
 
-	_, err := CanonicalDatabasePath(filepath.Join(first, "slipway.db"))
+	_, err := CanonicalDatabasePath(filepath.Join(first, "onderzeeer.db"))
 	if err == nil || !strings.Contains(err.Error(), "too many symlinks") {
 		t.Fatalf("CanonicalDatabasePath() error = %v, want symlink-depth error", err)
 	}
@@ -355,8 +355,8 @@ func TestMissingPathsEquivalentUsesExistingAncestorIdentity(t *testing.T) {
 	}
 
 	equivalent, err := missingPathsEquivalent(
-		filepath.Join(realDirectory, "future", "slipway.db"),
-		filepath.Join(aliasDirectory, "future", "slipway.db"),
+		filepath.Join(realDirectory, "future", "onderzeeer.db"),
+		filepath.Join(aliasDirectory, "future", "onderzeeer.db"),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -368,14 +368,14 @@ func TestMissingPathsEquivalentUsesExistingAncestorIdentity(t *testing.T) {
 
 func TestDeepestExistingAncestorAndSuffix(t *testing.T) {
 	root := t.TempDir()
-	ancestor, suffix, err := deepestExistingAncestorAndSuffix(filepath.Join(root, "future", "nested", "slipway.db"))
+	ancestor, suffix, err := deepestExistingAncestorAndSuffix(filepath.Join(root, "future", "nested", "onderzeeer.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ancestor != root {
 		t.Fatalf("ancestor = %q, want %q", ancestor, root)
 	}
-	if want := filepath.Join("future", "nested", "slipway.db"); suffix != want {
+	if want := filepath.Join("future", "nested", "onderzeeer.db"); suffix != want {
 		t.Fatalf("suffix = %q, want %q", suffix, want)
 	}
 }
@@ -390,9 +390,9 @@ func TestLoadCanonicalizesDatabaseButNotWatchSymlink(t *testing.T) {
 	if err := os.Symlink(realDirectory, link); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
-	filename := filepath.Join(root, "slipway.yaml")
+	filename := filepath.Join(root, "onderzeeer.yaml")
 	contents := `
-database: {path: linked/slipway.db}
+database: {path: linked/onderzeeer.db}
 watches:
   - name: incoming
     path: linked/incoming
@@ -406,7 +406,7 @@ watches:
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if want := filepath.Join(realDirectory, "slipway.db"); cfg.Database.Path != want {
+	if want := filepath.Join(realDirectory, "onderzeeer.db"); cfg.Database.Path != want {
 		t.Errorf("database path = %q, want %q", cfg.Database.Path, want)
 	}
 	if want := filepath.Join(link, "incoming"); cfg.Watches[0].Path != want {

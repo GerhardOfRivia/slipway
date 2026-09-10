@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/GerhardOfRivia/slipway/internal/config"
+	"github.com/GerhardOfRivia/onderzeeer/internal/config"
 )
 
 func TestWatcherRunDetectsConfiguredRootAncestorReplacement(t *testing.T) {

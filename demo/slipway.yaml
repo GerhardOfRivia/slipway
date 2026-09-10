@@ -4,7 +4,7 @@ queue:
   retry_delay: 10s
 
 database:
-  path: ./image/slipway.db
+  path: ./image/onderzeeer.db
 
 watches:
   - name: demo-openalpr

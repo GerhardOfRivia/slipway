@@ -17,7 +17,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/GerhardOfRivia/slipway/internal/config"
+	"github.com/GerhardOfRivia/onderzeeer/internal/config"
 	"github.com/fsnotify/fsnotify"
 )
 

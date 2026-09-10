@@ -14,16 +14,16 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/GerhardOfRivia/slipway/internal/config"
-	"github.com/GerhardOfRivia/slipway/internal/control"
-	"github.com/GerhardOfRivia/slipway/internal/daemon"
+	"github.com/GerhardOfRivia/onderzeeer/internal/config"
+	"github.com/GerhardOfRivia/onderzeeer/internal/control"
+	"github.com/GerhardOfRivia/onderzeeer/internal/daemon"
 )
 
 const controlTimeout = 30 * time.Second
 
 func startCommand(args []string, stdout, stderr io.Writer) error {
-	flags := newFlagSet("start", stderr, "slipway start <config-or-instance> [name] [--socket path]")
-	socketPath := flags.String("socket", "", "control socket (defaults to SLIPWAY_SOCKET or a per-user path)")
+	flags := newFlagSet("start", stderr, "onderzeeer start <config-or-instance> [name] [--socket path]")
+	socketPath := flags.String("socket", "", "control socket (defaults to ONDERZEEER_SOCKET or a per-user path)")
 	if err := parseFlags(flags, args); err != nil {
 		return err
 	}
@@ -55,7 +55,7 @@ func startCommand(args []string, stdout, stderr io.Writer) error {
 }
 
 func testCommand(args []string, stdout, stderr io.Writer) error {
-	flags := newFlagSet("test", stderr, "slipway test <config>")
+	flags := newFlagSet("test", stderr, "onderzeeer test <config>")
 	if err := parseFlags(flags, args); err != nil {
 		return err
 	}
@@ -147,10 +147,10 @@ func cancellationOnlyFrom(err, contextErr error) bool {
 }
 
 func psCommand(args []string, stdout, stderr io.Writer) error {
-	flags := newFlagSet("ps", stderr, "slipway ps [--all] [--socket path]")
+	flags := newFlagSet("ps", stderr, "onderzeeer ps [--all] [--socket path]")
 	all := flags.Bool("all", false, "include exited and failed instances")
 	flags.BoolVar(all, "a", false, "include exited and failed instances")
-	socketPath := flags.String("socket", "", "control socket (defaults to SLIPWAY_SOCKET or a per-user path)")
+	socketPath := flags.String("socket", "", "control socket (defaults to ONDERZEEER_SOCKET or a per-user path)")
 	if err := parseFlags(flags, args); err != nil {
 		return err
 	}
@@ -170,8 +170,8 @@ func psCommand(args []string, stdout, stderr io.Writer) error {
 }
 
 func stopCommand(args []string, stdout, stderr io.Writer) error {
-	flags := newFlagSet("stop", stderr, "slipway stop [--socket path] <id-or-name> [id-or-name ...]")
-	socketPath := flags.String("socket", "", "control socket (defaults to SLIPWAY_SOCKET or a per-user path)")
+	flags := newFlagSet("stop", stderr, "onderzeeer stop [--socket path] <id-or-name> [id-or-name ...]")
+	socketPath := flags.String("socket", "", "control socket (defaults to ONDERZEEER_SOCKET or a per-user path)")
 	if err := parseFlags(flags, args); err != nil {
 		return err
 	}

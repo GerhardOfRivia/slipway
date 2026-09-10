@@ -54,7 +54,7 @@ func TestLocalSavesStdoutRelativeToWorkingDirectory(t *testing.T) {
 		Args:       []string{"-test.run=^TestExecutorHelperProcess$", "--"},
 		WorkingDir: workingDirectory,
 		Output:     outputName,
-		Env:        map[string]string{"SLIPWAY_EXECUTOR_HELPER": "streams"},
+		Env:        map[string]string{"ONDERZEEER_EXECUTOR_HELPER": "streams"},
 	})
 	if err != nil {
 		t.Fatalf("Execute() error = %v; stderr = %s", err, result.Stderr)
@@ -88,8 +88,8 @@ func TestLocalOutputOpenFailureDoesNotStartCommand(t *testing.T) {
 		Args:    []string{"-test.run=^TestExecutorHelperProcess$", "--"},
 		Output:  filepath.Join(t.TempDir(), "missing", "output.txt"),
 		Env: map[string]string{
-			"SLIPWAY_EXECUTOR_HELPER": "mark-started",
-			"SLIPWAY_MARKER":          marker,
+			"ONDERZEEER_EXECUTOR_HELPER": "mark-started",
+			"ONDERZEEER_MARKER":          marker,
 		},
 	})
 	if err == nil || !strings.Contains(err.Error(), "open output") {
@@ -112,7 +112,7 @@ func TestLocalPassesUnsafeLookingPathAsOneLiteralArgument(t *testing.T) {
 		Name:    "echo arguments",
 		Program: os.Args[0],
 		Args:    []string{"-test.run=^TestExecutorHelperProcess$", "--", file, "literal * ? | >"},
-		Env:     map[string]string{"SLIPWAY_EXECUTOR_HELPER": "echo"},
+		Env:     map[string]string{"ONDERZEEER_EXECUTOR_HELPER": "echo"},
 	}
 
 	result, err := NewLocal(nil).Execute(context.Background(), command)
@@ -156,7 +156,7 @@ func TestLocalRunsExplicitShellWithExpansionAndLiteralPositionalArgs(t *testing.
 		Args: []string{
 			"-c",
 			`printf 'mode=%s\n' "$MODE"; printf 'arg=%s\n' "$1"; for path in ./*.txt; do printf 'file=%s\n' "$path"; done`,
-			"slipway-shell",
+			"onderzeeer-shell",
 			unsafeArgument,
 		},
 	})
@@ -179,7 +179,7 @@ func TestLocalTimeoutCapturesPartialOutput(t *testing.T) {
 		Name:    "slow command",
 		Program: os.Args[0],
 		Args:    []string{"-test.run=^TestExecutorHelperProcess$", "--"},
-		Env:     map[string]string{"SLIPWAY_EXECUTOR_HELPER": "sleep"},
+		Env:     map[string]string{"ONDERZEEER_EXECUTOR_HELPER": "sleep"},
 		Timeout: 75 * time.Millisecond,
 	})
 	if !errors.Is(err, ErrTimeout) || !errors.Is(err, context.DeadlineExceeded) {
@@ -205,12 +205,12 @@ func TestLocalBoundsCapturedOutput(t *testing.T) {
 		Program: os.Args[0],
 		Args:    []string{"-test.run=^TestExecutorHelperProcess$", "--"},
 		Output:  outputPath,
-		Env:     map[string]string{"SLIPWAY_EXECUTOR_HELPER": "large-output"},
+		Env:     map[string]string{"ONDERZEEER_EXECUTOR_HELPER": "large-output"},
 	})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	marker := fmt.Sprintf("\n[slipway: output truncated after %d bytes]\n", maxCapturedOutputBytes)
+	marker := fmt.Sprintf("\n[onderzeeer: output truncated after %d bytes]\n", maxCapturedOutputBytes)
 	for name, output := range map[string]string{"stdout": result.Stdout, "stderr": result.Stderr} {
 		if got, want := len(output), maxCapturedOutputBytes+len(marker); got != want {
 			t.Errorf("%s length = %d, want %d", name, got, want)
@@ -228,13 +228,13 @@ func TestLocalBoundsCapturedOutput(t *testing.T) {
 	if len(saved) != wantSavedBytes {
 		t.Fatalf("saved output length = %d, want complete %d-byte stream", len(saved), wantSavedBytes)
 	}
-	if strings.Contains(string(saved), "[slipway: output truncated") {
+	if strings.Contains(string(saved), "[onderzeeer: output truncated") {
 		t.Fatal("saved output contains the history truncation marker")
 	}
 }
 
 func TestExecutorHelperProcess(t *testing.T) {
-	mode := os.Getenv("SLIPWAY_EXECUTOR_HELPER")
+	mode := os.Getenv("ONDERZEEER_EXECUTOR_HELPER")
 	if mode == "" {
 		return
 	}
@@ -268,7 +268,7 @@ func TestExecutorHelperProcess(t *testing.T) {
 		fmt.Fprintln(os.Stdout, "standard output")
 		fmt.Fprintln(os.Stderr, "standard error")
 	case "mark-started":
-		if err := os.WriteFile(os.Getenv("SLIPWAY_MARKER"), []byte("started"), 0o600); err != nil {
+		if err := os.WriteFile(os.Getenv("ONDERZEEER_MARKER"), []byte("started"), 0o600); err != nil {
 			panic(err)
 		}
 	default:

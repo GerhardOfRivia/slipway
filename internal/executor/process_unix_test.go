@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-const unixHelperEnvironment = "SLIPWAY_EXECUTOR_UNIX_HELPER"
+const unixHelperEnvironment = "ONDERZEEER_EXECUTOR_UNIX_HELPER"
 
 func TestLocalCancellationKillsProcessGroup(t *testing.T) {
 	directory := t.TempDir()
@@ -30,9 +30,9 @@ func TestLocalCancellationKillsProcessGroup(t *testing.T) {
 			Program: os.Args[0],
 			Args:    []string{"-test.run=^TestExecutorUnixHelperProcess$"},
 			Env: map[string]string{
-				unixHelperEnvironment:   "parent",
-				"SLIPWAY_HELPER_READY":  readyPath,
-				"SLIPWAY_HELPER_MARKER": markerPath,
+				unixHelperEnvironment:      "parent",
+				"ONDERZEEER_HELPER_READY":  readyPath,
+				"ONDERZEEER_HELPER_MARKER": markerPath,
 			},
 		})
 		done <- err
@@ -68,11 +68,11 @@ func TestLocalWaitDelayBoundsInheritedOutputPipe(t *testing.T) {
 		Program: os.Args[0],
 		Args:    []string{"-test.run=^TestExecutorUnixHelperProcess$"},
 		Env: map[string]string{
-			unixHelperEnvironment:             "background-parent",
-			"SLIPWAY_HELPER_READY":            readyPath,
-			"SLIPWAY_HELPER_DESCENDANT_READY": descendantReadyPath,
-			"SLIPWAY_HELPER_TRIGGER":          triggerPath,
-			"SLIPWAY_HELPER_MARKER":           markerPath,
+			unixHelperEnvironment:                "background-parent",
+			"ONDERZEEER_HELPER_READY":            readyPath,
+			"ONDERZEEER_HELPER_DESCENDANT_READY": descendantReadyPath,
+			"ONDERZEEER_HELPER_TRIGGER":          triggerPath,
+			"ONDERZEEER_HELPER_MARKER":           markerPath,
 		},
 	})
 	elapsed := time.Since(started)
@@ -108,11 +108,11 @@ func TestExecutorUnixHelperProcess(t *testing.T) {
 		if err := child.Start(); err != nil {
 			panic(err)
 		}
-		writeHelperPID(os.Getenv("SLIPWAY_HELPER_READY"))
+		writeHelperPID(os.Getenv("ONDERZEEER_HELPER_READY"))
 		time.Sleep(10 * time.Second)
 	case "descendant":
 		time.Sleep(700 * time.Millisecond)
-		if err := os.WriteFile(os.Getenv("SLIPWAY_HELPER_MARKER"), []byte("survived"), 0o600); err != nil {
+		if err := os.WriteFile(os.Getenv("ONDERZEEER_HELPER_MARKER"), []byte("survived"), 0o600); err != nil {
 			panic(err)
 		}
 	case "background-parent":
@@ -122,16 +122,16 @@ func TestExecutorUnixHelperProcess(t *testing.T) {
 		if err := child.Start(); err != nil {
 			panic(err)
 		}
-		waitForHelperFile(os.Getenv("SLIPWAY_HELPER_DESCENDANT_READY"))
-		writeHelperPID(os.Getenv("SLIPWAY_HELPER_READY"))
+		waitForHelperFile(os.Getenv("ONDERZEEER_HELPER_DESCENDANT_READY"))
+		writeHelperPID(os.Getenv("ONDERZEEER_HELPER_READY"))
 		// Exit immediately instead of letting the race-enabled test harness do
 		// its own comparatively slow shutdown; WaitDelay should be measured from
 		// the command's exit, not test-runner bookkeeping.
 		os.Exit(0)
 	case "background-descendant":
-		writeHelperPID(os.Getenv("SLIPWAY_HELPER_DESCENDANT_READY"))
-		waitForHelperFile(os.Getenv("SLIPWAY_HELPER_TRIGGER"))
-		if err := os.WriteFile(os.Getenv("SLIPWAY_HELPER_MARKER"), []byte("survived"), 0o600); err != nil {
+		writeHelperPID(os.Getenv("ONDERZEEER_HELPER_DESCENDANT_READY"))
+		waitForHelperFile(os.Getenv("ONDERZEEER_HELPER_TRIGGER"))
+		if err := os.WriteFile(os.Getenv("ONDERZEEER_HELPER_MARKER"), []byte("survived"), 0o600); err != nil {
 			panic(err)
 		}
 	default:

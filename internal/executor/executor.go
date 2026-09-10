@@ -245,7 +245,7 @@ func (buffer *limitedBuffer) String() string {
 	if !buffer.truncated {
 		return buffer.buffer.String()
 	}
-	return buffer.buffer.String() + fmt.Sprintf("\n[slipway: output truncated after %d bytes]\n", buffer.limit)
+	return buffer.buffer.String() + fmt.Sprintf("\n[onderzeeer: output truncated after %d bytes]\n", buffer.limit)
 }
 
 func commandLabel(command Command) string {

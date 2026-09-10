@@ -5,7 +5,7 @@ ARG GO_IMAGE=docker.io/library/golang:1.26-trixie
 ARG RUNTIME_IMAGE=docker.io/library/debian:trixie-slim
 ARG VERSION=dev
 
-# Build the dashboard that slipwayd embeds at compile time.
+# Build the dashboard that onderzeeerd embeds at compile time.
 FROM ${NODE_IMAGE} AS web-build
 WORKDIR /src/web
 
@@ -30,21 +30,21 @@ COPY --from=web-build /src/internal/webui/dist/ ./internal/webui/dist/
 RUN mkdir -p /out \
     && go build -mod=readonly -trimpath -buildvcs=false \
         -ldflags="-s -w -X main.Version=${VERSION}" \
-        -o /out/slipwayd ./cmd/slipwayd \
+        -o /out/onderzeeerd ./cmd/onderzeeerd \
     && go build -mod=readonly -trimpath -buildvcs=false \
         -ldflags="-s -w -X main.Version=${VERSION}" \
-        -o /out/slipway ./cmd/slipway
+        -o /out/onderzeeer ./cmd/onderzeeer
 
 # Keep a normal Linux userspace for command-executor pipelines.
 # Add workload-specific executables here, or in a derived image.
 FROM ${RUNTIME_IMAGE} AS runtime
 ARG VERSION
-ARG SLIPWAY_UID=1000
-ARG SLIPWAY_GID=1000
+ARG ONDERZEEER_UID=1000
+ARG ONDERZEEER_GID=1000
 
-LABEL org.opencontainers.image.title="slipwayd" \
-      org.opencontainers.image.description="Slipway file-triggered job daemon" \
-      org.opencontainers.image.source="https://github.com/GerhardOfRivia/slipway" \
+LABEL org.opencontainers.image.title="onderzeeerd" \
+      org.opencontainers.image.description="Onderzeeer file-triggered job daemon" \
+      org.opencontainers.image.source="https://github.com/GerhardOfRivia/onderzeeer" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.licenses="MIT"
 
@@ -55,27 +55,27 @@ RUN apt-get update \
         tini \
         tzdata \
     && rm -rf /var/lib/apt/lists/* \
-    && groupadd --gid "${SLIPWAY_GID}" slipway \
-    && useradd --uid "${SLIPWAY_UID}" --gid "${SLIPWAY_GID}" \
-        --create-home --home-dir /home/slipway \
-        --shell /usr/sbin/nologin --no-log-init slipway \
-    && install -d -m 0700 -o slipway -g slipway /run/slipway \
-    && install -d -m 0750 -o slipway -g slipway /workspace
+    && groupadd --gid "${ONDERZEEER_GID}" onderzeeer \
+    && useradd --uid "${ONDERZEEER_UID}" --gid "${ONDERZEEER_GID}" \
+        --create-home --home-dir /home/onderzeeer \
+        --shell /usr/sbin/nologin --no-log-init onderzeeer \
+    && install -d -m 0700 -o onderzeeer -g onderzeeer /run/onderzeeer \
+    && install -d -m 0750 -o onderzeeer -g onderzeeer /workspace
 
-COPY --from=go-build /out/slipwayd /out/slipway /usr/local/bin/
+COPY --from=go-build /out/onderzeeerd /out/onderzeeer /usr/local/bin/
 
-ENV HOME=/home/slipway \
-    SLIPWAY_SOCKET=/run/slipway/slipway.sock
+ENV HOME=/home/onderzeeer \
+    ONDERZEEER_SOCKET=/run/onderzeeer/onderzeeer.sock
 
 WORKDIR /workspace
-USER ${SLIPWAY_UID}:${SLIPWAY_GID}
+USER ${ONDERZEEER_UID}:${ONDERZEEER_GID}
 
 # This probes the control API, not individual pipeline health.
-# Override SLIPWAY_SOCKET with an environment variable, not just a daemon flag,
+# Override ONDERZEEER_SOCKET with an environment variable, not just a daemon flag,
 # to keep the daemon and this client-based probe pointed at the same socket.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["/usr/local/bin/slipway", "ps"]
+    CMD ["/usr/local/bin/onderzeeer", "ps"]
 
 STOPSIGNAL SIGTERM
-ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/slipwayd"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/onderzeeerd"]
 CMD []

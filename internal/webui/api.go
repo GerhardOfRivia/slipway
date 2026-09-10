@@ -20,8 +20,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/GerhardOfRivia/slipway/internal/control"
-	"github.com/GerhardOfRivia/slipway/internal/queue"
+	"github.com/GerhardOfRivia/onderzeeer/internal/control"
+	"github.com/GerhardOfRivia/onderzeeer/internal/queue"
 )
 
 const (
@@ -539,8 +539,8 @@ func validateMutation(output http.ResponseWriter, request *http.Request) error {
 	if err != nil || mediaType != "application/json" {
 		return errors.New("Content-Type must be application/json")
 	}
-	if request.Header.Get("X-slipway-Web") != "1" {
-		return errors.New("X-slipway-Web header is required")
+	if request.Header.Get("X-onderzeeer-Web") != "1" {
+		return errors.New("X-onderzeeer-Web header is required")
 	}
 	if site := request.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
 		return errors.New("cross-site requests are not allowed")
@@ -548,7 +548,7 @@ func validateMutation(output http.ResponseWriter, request *http.Request) error {
 	if origin := request.Header.Get("Origin"); origin != "" {
 		parsed, parseErr := url.Parse(origin)
 		if parseErr != nil || parsed.Scheme != "http" || !strings.EqualFold(parsed.Host, request.Host) {
-			return errors.New("request origin does not match the slipway web origin")
+			return errors.New("request origin does not match the onderzeeer web origin")
 		}
 	}
 

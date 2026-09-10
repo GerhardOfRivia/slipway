@@ -20,7 +20,7 @@ func TestClientDoesNotCallUnknownRequestOutcomeDaemonUnavailable(t *testing.T) {
 	t.Parallel()
 	transportFailure := errors.New("connection reset after request write")
 	client := &Client{
-		socketPath: "/private/slipway.sock",
+		socketPath: "/private/onderzeeer.sock",
 		httpClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			return nil, transportFailure
 		})},
@@ -42,7 +42,7 @@ func TestClientMarksInterruptedMutationOutcomeUnknown(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	client := &Client{
-		socketPath: "/private/slipway.sock",
+		socketPath: "/private/onderzeeer.sock",
 		httpClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			cancel()
 			return nil, context.Canceled
@@ -141,7 +141,7 @@ func TestClientRunKeepsAcknowledgedStreamFailureOrdinary(t *testing.T) {
 func TestClientRunSendsRemoveOnExit(t *testing.T) {
 	t.Parallel()
 	client := &Client{
-		socketPath: "/private/slipway.sock",
+		socketPath: "/private/onderzeeer.sock",
 		httpClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 			if request.Method != http.MethodPost || request.URL.Path != "/v1/run" {
 				t.Fatalf("Run request = %s %s, want POST /v1/run", request.Method, request.URL.Path)
@@ -179,7 +179,7 @@ func TestClientRunSendsRemoveOnExit(t *testing.T) {
 func TestClientRunOmitsDefaultRemoveOnExit(t *testing.T) {
 	t.Parallel()
 	client := &Client{
-		socketPath: "/private/slipway.sock",
+		socketPath: "/private/onderzeeer.sock",
 		httpClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 			var input map[string]json.RawMessage
 			if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
@@ -205,7 +205,7 @@ func TestClientRunOmitsDefaultRemoveOnExit(t *testing.T) {
 
 func clientWithSuccessfulBody(status int, body string) *Client {
 	return &Client{
-		socketPath: "/private/slipway.sock",
+		socketPath: "/private/onderzeeer.sock",
 		httpClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			return &http.Response{
 				StatusCode: status,

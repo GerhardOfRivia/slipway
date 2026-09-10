@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/GerhardOfRivia/slipway/internal/config"
-	"github.com/GerhardOfRivia/slipway/internal/executor"
-	"github.com/GerhardOfRivia/slipway/internal/queue"
+	"github.com/GerhardOfRivia/onderzeeer/internal/config"
+	"github.com/GerhardOfRivia/onderzeeer/internal/executor"
+	"github.com/GerhardOfRivia/onderzeeer/internal/queue"
 )
 
 const (
@@ -353,7 +353,7 @@ func lastFailureOutputLine(output string) string {
 }
 
 func isCapturedOutputTruncationMarker(line string) bool {
-	return strings.HasPrefix(line, "[slipway: output truncated after ") && strings.HasSuffix(line, " bytes]")
+	return strings.HasPrefix(line, "[onderzeeer: output truncated after ") && strings.HasSuffix(line, " bytes]")
 }
 
 func truncateFailureDetail(detail string) string {

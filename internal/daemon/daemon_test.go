@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/GerhardOfRivia/slipway/internal/config"
-	"github.com/GerhardOfRivia/slipway/internal/queue"
+	"github.com/GerhardOfRivia/onderzeeer/internal/config"
+	"github.com/GerhardOfRivia/onderzeeer/internal/queue"
 )
 
 func TestRunWarnsAboutDockerTerminalFlags(t *testing.T) {
@@ -69,7 +69,7 @@ func TestRunProcessesExistingFileAndStops(t *testing.T) {
 		t.Fatal(err)
 	}
 	marker := filepath.Join(directory, "executed")
-	database := filepath.Join(directory, "slipway.db")
+	database := filepath.Join(directory, "onderzeeer.db")
 	cfg := &config.Config{
 		Queue:    config.QueueConfig{Workers: 1, RetryDelay: config.Duration{Duration: time.Millisecond}},
 		Database: config.DatabaseConfig{Path: database},
@@ -84,7 +84,7 @@ func TestRunProcessesExistingFileAndStops(t *testing.T) {
 				Name:    "record",
 				Program: os.Args[0],
 				Args:    []string{"-test.run=^TestDaemonHelperProcess$", "--", "{{file}}", "{{job_id}}"},
-				Env:     map[string]string{"SLIPWAY_DAEMON_TEST_MARKER": marker},
+				Env:     map[string]string{"ONDERZEEER_DAEMON_TEST_MARKER": marker},
 			}},
 		}},
 	}
@@ -170,7 +170,7 @@ func TestRunProcessesExistingFileAndStops(t *testing.T) {
 }
 
 func TestDaemonHelperProcess(t *testing.T) {
-	marker := os.Getenv("SLIPWAY_DAEMON_TEST_MARKER")
+	marker := os.Getenv("ONDERZEEER_DAEMON_TEST_MARKER")
 	if marker == "" {
 		return
 	}

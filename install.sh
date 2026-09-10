@@ -1,12 +1,12 @@
 #!/usr/bin/env sh
-# slipway installer - https://github.com/GerhardOfRivia/slipway
-# Usage: curl -fsSL https://raw.githubusercontent.com/GerhardOfRivia/slipway/refs/heads/main/install.sh | sh
+# onderzeeer installer - https://github.com/GerhardOfRivia/onderzeeer
+# Usage: curl -fsSL https://raw.githubusercontent.com/GerhardOfRivia/onderzeeer/refs/heads/main/install.sh | sh
 
 set -e
 
-PACKAGE="slipway"
+PACKAGE="onderzeeer"
 REPO="GerhardOfRivia/${PACKAGE}"
-INSTALL_DIR="${SLIPWAY_INSTALL_DIR:-$HOME/.local/bin}"
+INSTALL_DIR="${ONDERZEEER_INSTALL_DIR:-$HOME/.local/bin}"
 
 # Colors
 RED='\033[0;31m'
@@ -63,7 +63,7 @@ get_latest_version() {
     fi
 
     if [ -z "$VERSION" ]; then
-        error "Failed to get latest version (GitHub API may be rate-limited; set SLIPWAY_VERSION=vX.Y.Z to pin)"
+        error "Failed to get latest version (GitHub API may be rate-limited; set ONDERZEEER_VERSION=vX.Y.Z to pin)"
     fi
 }
 
@@ -89,12 +89,12 @@ install() {
     TEMP_DIR=$(mktemp -d)
     CHECKSUMS="${TEMP_DIR}/checksums.txt"
 
-    if [ "${SLIPWAY_SKIP_CHECKSUM:-0}" = "1" ]; then
-        warn "SLIPWAY_SKIP_CHECKSUM=1 set — SKIPPING checksum verification (NOT RECOMMENDED)"
+    if [ "${ONDERZEEER_SKIP_CHECKSUM:-0}" = "1" ]; then
+        warn "ONDERZEEER_SKIP_CHECKSUM=1 set — SKIPPING checksum verification (NOT RECOMMENDED)"
     else
         info "Downloading checksums..."
         if ! curl -fsSL "$CHECKSUMS_URL" -o "$CHECKSUMS"; then
-            error "Failed to download checksums.txt — refusing to install unverified binary (set SLIPWAY_SKIP_CHECKSUM=1 to bypass at your own risk)"
+            error "Failed to download checksums.txt — refusing to install unverified binary (set ONDERZEEER_SKIP_CHECKSUM=1 to bypass at your own risk)"
         fi
     fi
 
@@ -107,7 +107,7 @@ install() {
         error "Failed to download ${PACKAGE}"
     fi
 
-    if [ "${SLIPWAY_SKIP_CHECKSUM:-0}" != "1" ]; then
+    if [ "${ONDERZEEER_SKIP_CHECKSUM:-0}" != "1" ]; then
         info "Verifying SHA-256 checksum for ${PACKAGE}..."
         EXPECTED=$(awk -v asset="$ASSET_NAME" '$2 == asset || $2 == "release/" asset { print $1; exit }' "$CHECKSUMS")
         if [ -z "$EXPECTED" ]; then
@@ -130,7 +130,7 @@ install() {
     tar -xvf $ARCHIVE -C $TEMP_DIR
 
     mkdir -p "$INSTALL_DIR"
-    for BINARY_NAME in slipwayd slipway; do
+    for BINARY_NAME in onderzeeerd onderzeeer; do
         mv "${TEMP_DIR}/${BINARY_NAME}" "${INSTALL_DIR}/${BINARY_NAME}"
         chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
         info "Successfully installed ${BINARY_NAME} to ${INSTALL_DIR}/${BINARY_NAME}"
@@ -143,7 +143,7 @@ install() {
 # Verify installation
 verify() {
     MISSING_FROM_PATH=0
-    for BINARY_NAME in slipwayd slipway; do
+    for BINARY_NAME in onderzeeerd onderzeeer; do
         INSTALLED_BIN="${INSTALL_DIR}/${BINARY_NAME}"
         if [ -x "$INSTALLED_BIN" ]; then
             info "Verification: $("$INSTALLED_BIN" --version)"
@@ -161,14 +161,14 @@ verify() {
 }
 
 main() {
-    info "Installing slipway and slipwayd..."
+    info "Installing onderzeeer and onderzeeerd..."
 
     detect_os
     detect_arch
     get_target
-    if [ -n "$SLIPWAY_VERSION" ]; then
-        VERSION="$SLIPWAY_VERSION"
-        info "Using pinned version from SLIPWAY_VERSION: $VERSION"
+    if [ -n "$ONDERZEEER_VERSION" ]; then
+        VERSION="$ONDERZEEER_VERSION"
+        info "Using pinned version from ONDERZEEER_VERSION: $VERSION"
     else
         get_latest_version
     fi
@@ -176,7 +176,7 @@ main() {
     verify
 
     echo ""
-    info "Installation complete! Run 'slipway --help' to get started."
+    info "Installation complete! Run 'onderzeeer --help' to get started."
 }
 
 main

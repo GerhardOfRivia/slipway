@@ -1,24 +1,24 @@
 services:
-  slipwayd:
+  onderzeeerd:
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        SLIPWAY_UID: "${SLIPWAY_UID:?Set SLIPWAY_UID in .env}"
-        SLIPWAY_GID: "${SLIPWAY_GID:?Set SLIPWAY_GID in .env}"
-    image: localhost/slipway:local
-    container_name: slipwayd
+        ONDERZEEER_UID: "${ONDERZEEER_UID:?Set ONDERZEEER_UID in .env}"
+        ONDERZEEER_GID: "${ONDERZEEER_GID:?Set ONDERZEEER_GID in .env}"
+    image: localhost/onderzeeer:local
+    container_name: onderzeeerd
     restart: unless-stopped
     stop_grace_period: 45s
 
     environment:
-      SLIPWAY_SOCKET: /run/slipway/slipway.sock
-      SLIPWAY_STATE_DIR: "${SLIPWAY_WORKSPACE}/state"
-      SLIPWAY_WEB_LISTEN: "0.0.0.0:5280"
+      ONDERZEEER_SOCKET: /run/onderzeeer/onderzeeer.sock
+      ONDERZEEER_STATE_DIR: "${ONDERZEEER_WORKSPACE}/state"
+      ONDERZEEER_WEB_LISTEN: "0.0.0.0:5280"
 
-    # Register instances with slipway start; daemon restarts restore the registry.
+    # Register instances with onderzeeer start; daemon restarts restore the registry.
 
-    working_dir: "${SLIPWAY_WORKSPACE:?Set SLIPWAY_WORKSPACE in .env}"
+    working_dir: "${ONDERZEEER_WORKSPACE:?Set ONDERZEEER_WORKSPACE in .env}"
 
     ports:
       # Publish the dashboard on host loopback, not all host interfaces.
@@ -27,14 +27,14 @@ services:
     volumes:
       # Pre-create this directory as your user, with mode 0700.
       - type: bind
-        source: "${SLIPWAY_SOCKET_DIR:?Set SLIPWAY_SOCKET_DIR in .env}"
-        target: /run/slipway
+        source: "${ONDERZEEER_SOCKET_DIR:?Set ONDERZEEER_SOCKET_DIR in .env}"
+        target: /run/onderzeeer
         bind:
           create_host_path: false
 
       # Preserve absolute paths for configs submitted by host-side clients.
       - type: bind
-        source: "${SLIPWAY_WORKSPACE:?Set SLIPWAY_WORKSPACE in .env}"
-        target: "${SLIPWAY_WORKSPACE:?Set SLIPWAY_WORKSPACE in .env}"
+        source: "${ONDERZEEER_WORKSPACE:?Set ONDERZEEER_WORKSPACE in .env}"
+        target: "${ONDERZEEER_WORKSPACE:?Set ONDERZEEER_WORKSPACE in .env}"
         bind:
           create_host_path: false

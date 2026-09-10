@@ -1,4 +1,4 @@
-// Package queue implements slipway's durable SQLite-backed job queue.
+// Package queue implements onderzeeer's durable SQLite-backed job queue.
 package queue
 
 import (

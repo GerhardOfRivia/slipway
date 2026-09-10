@@ -18,8 +18,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/GerhardOfRivia/slipway/internal/config"
-	"github.com/GerhardOfRivia/slipway/internal/daemon"
+	"github.com/GerhardOfRivia/onderzeeer/internal/config"
+	"github.com/GerhardOfRivia/onderzeeer/internal/daemon"
 )
 
 const (
@@ -269,7 +269,7 @@ func (manager *Manager) startManyContext(startContext context.Context, configPat
 	}
 	if manager.registry != nil {
 		if attach {
-			return startResult{}, errors.New("control: attached daemon runs are no longer supported; use slipway test for foreground execution or slipway start for a persistent instance")
+			return startResult{}, errors.New("control: attached daemon runs are no longer supported; use onderzeeer test for foreground execution or onderzeeer start for a persistent instance")
 		}
 		instances, err := manager.startRegistered(startContext, configPaths, name)
 		return startResult{instances: instances}, err
@@ -1251,7 +1251,7 @@ func automaticName(configPath string) string {
 	}
 	name := strings.Trim(normalized.String(), ".-")
 	if name == "" {
-		return "slipway"
+		return "onderzeeer"
 	}
 	return name
 }

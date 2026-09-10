@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/GerhardOfRivia/slipway/internal/config"
+	"github.com/GerhardOfRivia/onderzeeer/internal/config"
 )
 
 func TestLinuxWatcherUsesFilesystemNotificationBackend(t *testing.T) {

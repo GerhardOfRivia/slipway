@@ -13,16 +13,16 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/GerhardOfRivia/slipway/internal/control"
-	"github.com/GerhardOfRivia/slipway/internal/webui"
+	"github.com/GerhardOfRivia/onderzeeer/internal/control"
+	"github.com/GerhardOfRivia/onderzeeer/internal/webui"
 )
 
-// RunDaemon executes a slipwayd invocation and returns a process exit code.
+// RunDaemon executes a onderzeeerd invocation and returns a process exit code.
 func RunDaemon(args []string, stdout, stderr io.Writer) int {
 	return RunDaemonVersion(args, stdout, stderr, "dev")
 }
 
-// RunDaemonVersion executes a slipwayd invocation using version as the displayed
+// RunDaemonVersion executes a onderzeeerd invocation using version as the displayed
 // build version. With no arguments, it starts the daemon.
 func RunDaemonVersion(args []string, stdout, stderr io.Writer, version string) int {
 	if stdout == nil {
@@ -38,10 +38,10 @@ func RunDaemonVersion(args []string, stdout, stderr io.Writer, version string) i
 			return 0
 		case "version", "-v", "-version", "--version":
 			if len(args) != 1 {
-				fmt.Fprintln(stderr, "slipwayd: version does not accept arguments")
+				fmt.Fprintln(stderr, "onderzeeerd: version does not accept arguments")
 				return 2
 			}
-			fmt.Fprintf(stdout, "slipwayd %s\n", version)
+			fmt.Fprintf(stdout, "onderzeeerd %s\n", version)
 			return 0
 		}
 	}
@@ -52,24 +52,24 @@ func RunDaemonVersion(args []string, stdout, stderr io.Writer, version string) i
 	}
 	var usage usageError
 	if errors.As(err, &usage) {
-		fmt.Fprintln(stderr, "slipwayd:", usage.message)
+		fmt.Fprintln(stderr, "onderzeeerd:", usage.message)
 		return 2
 	}
-	fmt.Fprintln(stderr, "slipwayd:", err)
+	fmt.Fprintln(stderr, "onderzeeerd:", err)
 	return 1
 }
 
 func daemonCommand(args []string, stderr io.Writer, version string) error {
-	flags := newFlagSet("slipwayd", stderr, "slipwayd [--socket path] [--web-listen address] [--log-level level] [--state-dir path]")
-	socketPath := flags.String("socket", "", "control socket (defaults to SLIPWAY_SOCKET or a per-user path)")
+	flags := newFlagSet("onderzeeerd", stderr, "onderzeeerd [--socket path] [--web-listen address] [--log-level level] [--state-dir path]")
+	socketPath := flags.String("socket", "", "control socket (defaults to ONDERZEEER_SOCKET or a per-user path)")
 	webListen := flags.String("web-listen", webListenDefault(), "optional loopback or wildcard address for the web dashboard (for example 127.0.0.1:8080)")
 	logLevel := flags.String("log-level", "info", "debug, info, warn, or error")
-	stateDirectory := flags.String("state-dir", "", "persistent daemon state (defaults to SLIPWAY_STATE_DIR or the per-user state directory)")
+	stateDirectory := flags.String("state-dir", "", "persistent daemon state (defaults to ONDERZEEER_STATE_DIR or the per-user state directory)")
 	if err := parseFlags(flags, args); err != nil {
 		return err
 	}
 	if flags.NArg() != 0 {
-		return usageError{message: "does not accept positional arguments; register instances with slipway start <config> [name]"}
+		return usageError{message: "does not accept positional arguments; register instances with onderzeeer start <config> [name]"}
 	}
 
 	level, err := parseLogLevel(*logLevel)
@@ -185,26 +185,26 @@ func serveDaemonServers(
 }
 
 func printDaemonUsage(output io.Writer) {
-	fmt.Fprintln(output, `slipway daemon manages file-watching instances.
+	fmt.Fprintln(output, `onderzeeer daemon manages file-watching instances.
 
 Usage:
-  slipwayd [--socket path] [--web-listen address] [--log-level level] [--state-dir path]
-  slipwayd version
+  onderzeeerd [--socket path] [--web-listen address] [--log-level level] [--state-dir path]
+  onderzeeerd version
 
-Starts the daemon; no existing slipwayd is required.
+Starts the daemon; no existing onderzeeerd is required.
 The version command prints the version without starting the daemon.
 
-Register instances separately with: slipway start <config> [name]
+Register instances separately with: onderzeeer start <config> [name]
 Registered instances and their queue databases persist in --state-dir,
-SLIPWAY_STATE_DIR, or $XDG_STATE_HOME/slipway (default ~/.local/state/slipway).
+ONDERZEEER_STATE_DIR, or $XDG_STATE_HOME/onderzeeer (default ~/.local/state/onderzeeer).
 Every start restores saved configurations whose desired state is running.
 Explicitly stopped instances stay stopped; a new state directory starts empty.
 Config paths, directories, and instance names are not accepted as daemon arguments.
-SLIPWAY_CONFIG is not used.`)
+ONDERZEEER_CONFIG is not used.`)
 }
 
 func webListenDefault() string {
-	return strings.TrimSpace(os.Getenv("SLIPWAY_WEB_LISTEN"))
+	return strings.TrimSpace(os.Getenv("ONDERZEEER_WEB_LISTEN"))
 }
 
 func webTokenPath(socketPath string) string {

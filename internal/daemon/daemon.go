@@ -9,14 +9,14 @@ import (
 	"io"
 	"log/slog"
 
-	"github.com/GerhardOfRivia/slipway/internal/config"
-	"github.com/GerhardOfRivia/slipway/internal/executor"
-	"github.com/GerhardOfRivia/slipway/internal/queue"
-	"github.com/GerhardOfRivia/slipway/internal/watcher"
-	"github.com/GerhardOfRivia/slipway/internal/worker"
+	"github.com/GerhardOfRivia/onderzeeer/internal/config"
+	"github.com/GerhardOfRivia/onderzeeer/internal/executor"
+	"github.com/GerhardOfRivia/onderzeeer/internal/queue"
+	"github.com/GerhardOfRivia/onderzeeer/internal/watcher"
+	"github.com/GerhardOfRivia/onderzeeer/internal/worker"
 )
 
-const singleVersionFingerprint = "slipway:path"
+const singleVersionFingerprint = "onderzeeer:path"
 
 // Run starts discovery and execution and blocks until ctx is canceled or a
 // component returns an error. Interrupted child processes are persisted as a

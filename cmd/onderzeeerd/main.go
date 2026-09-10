@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/GerhardOfRivia/slipway/internal/cli"
+	"github.com/GerhardOfRivia/onderzeeer/internal/cli"
 )
 
 // Version is replaced at build time with -ldflags "-X main.Version=...".

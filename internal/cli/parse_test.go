@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/GerhardOfRivia/slipway/internal/config"
+	"github.com/GerhardOfRivia/onderzeeer/internal/config"
 	"gopkg.in/yaml.v3"
 )
 
@@ -405,7 +405,7 @@ func TestParseContainerRunFallsBackToRawArguments(t *testing.T) {
 			t.Parallel()
 			invocation := append([]string{"parse", "--", test.program}, test.args...)
 			code, stdout, stderr := runParseCLI(invocation...)
-			if code != 0 || !strings.Contains(stderr, "slipway parse: warning:") ||
+			if code != 0 || !strings.Contains(stderr, "onderzeeer parse: warning:") ||
 				!strings.Contains(stderr, test.warning) || !strings.Contains(stderr, "emitted raw runtime args") {
 				t.Fatalf("Run(%v) = code %d, stderr %q", invocation, code, stderr)
 			}
@@ -507,7 +507,7 @@ func TestParseUsageErrorsAndHelp(t *testing.T) {
 		{name: "missing command", args: []string{"parse"}, wantCode: 2, want: "parse requires a command"},
 		{name: "blank command", args: []string{"parse", "--", " "}, wantCode: 2, want: "parse command must not be blank"},
 		{name: "blank name", args: []string{"parse", "--name", " ", "--", "true"}, wantCode: 2, want: "parse --name must not be blank"},
-		{name: "help", args: []string{"parse", "--help"}, wantCode: 0, want: "Usage: slipway parse [--name name] -- <program> [argument ...]"},
+		{name: "help", args: []string{"parse", "--help"}, wantCode: 0, want: "Usage: onderzeeer parse [--name name] -- <program> [argument ...]"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -523,7 +523,7 @@ func TestParseUsageErrorsAndHelp(t *testing.T) {
 func TestTopLevelHelpIncludesParse(t *testing.T) {
 	t.Parallel()
 	code, stdout, stderr := runParseCLI("--help")
-	if code != 0 || stderr != "" || !strings.Contains(stdout, "slipway parse [--name name] -- <program> [argument ...]") {
+	if code != 0 || stderr != "" || !strings.Contains(stdout, "onderzeeer parse [--name name] -- <program> [argument ...]") {
 		t.Fatalf("Run(--help) = code %d, stdout %q, stderr %q", code, stdout, stderr)
 	}
 }
@@ -545,7 +545,7 @@ type generatedConfigFragment struct {
 
 func loadGeneratedPipeline(t *testing.T, fragment string) config.CommandConfig {
 	t.Helper()
-	configPath := filepath.Join(t.TempDir(), "slipway.yaml")
+	configPath := filepath.Join(t.TempDir(), "onderzeeer.yaml")
 	indentedFragment := "    " + strings.ReplaceAll(strings.TrimSuffix(fragment, "\n"), "\n", "\n    ")
 	completeConfig := "watches:\n  - name: incoming\n    path: .\n" + indentedFragment + "\n"
 	if err := os.WriteFile(configPath, []byte(completeConfig), 0o600); err != nil {
