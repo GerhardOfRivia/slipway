@@ -17,6 +17,7 @@ import (
 	"github.com/GerhardOfRivia/onderzeeer/internal/config"
 	"github.com/GerhardOfRivia/onderzeeer/internal/control"
 	"github.com/GerhardOfRivia/onderzeeer/internal/daemon"
+	"github.com/GerhardOfRivia/onderzeeer/internal/testutil"
 )
 
 func TestManagedCommandsLifecycle(t *testing.T) {
@@ -50,7 +51,7 @@ func TestManagedCommandsLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	socketPath := filepath.Join(root, "control", "onderzeeer.sock")
+	socketPath := filepath.Join(testutil.SocketDir(t), "control", "onderzeeer.sock")
 	server, err := control.NewServer(socketPath, manager, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -142,7 +143,7 @@ func TestManagedCommandsReportUnavailableDaemon(t *testing.T) {
 	if err := os.WriteFile(configPath, []byte("# discovery only\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	socketDirectory := filepath.Join(root, "control")
+	socketDirectory := filepath.Join(testutil.SocketDir(t), "control")
 	if err := os.Mkdir(socketDirectory, 0o700); err != nil {
 		t.Fatal(err)
 	}

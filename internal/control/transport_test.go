@@ -14,12 +14,13 @@ import (
 	"time"
 
 	"github.com/GerhardOfRivia/onderzeeer/internal/config"
+	"github.com/GerhardOfRivia/onderzeeer/internal/testutil"
 )
 
 func TestUnixHTTPStartListStop(t *testing.T) {
 	t.Parallel()
 
-	root := privateTransportTempDir(t)
+	root := t.TempDir()
 	configPath := filepath.Join(root, "worker.yaml")
 	runnerStarted := make(chan struct{})
 	manager, client, _ := newUnixTransportHarness(t, Options{
@@ -471,7 +472,7 @@ func TestUnixHTTPDroppedRemoveOnExitAttachmentEventuallyRemovesInstance(t *testi
 func TestUnixHTTPDaemonUnavailableIsTyped(t *testing.T) {
 	t.Parallel()
 
-	socketPath := filepath.Join(t.TempDir(), "missing.sock")
+	socketPath := filepath.Join(testutil.SocketDir(t), "missing.sock")
 	client := NewClient(socketPath)
 	defer client.CloseIdleConnections()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -492,7 +493,7 @@ func TestUnixHTTPDaemonUnavailableIsTyped(t *testing.T) {
 func TestNewServerReplacesStaleUnixSocket(t *testing.T) {
 	t.Parallel()
 
-	root := privateTransportTempDir(t)
+	root := testutil.SocketDir(t)
 	socketPath := filepath.Join(root, "onderzeeer.sock")
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: socketPath, Net: "unix"})
 	if err != nil {
@@ -520,7 +521,7 @@ func TestNewServerReplacesStaleUnixSocket(t *testing.T) {
 func TestNewServerRefusesToReplaceRegularFile(t *testing.T) {
 	t.Parallel()
 
-	socketPath := filepath.Join(privateTransportTempDir(t), "onderzeeer.sock")
+	socketPath := filepath.Join(testutil.SocketDir(t), "onderzeeer.sock")
 	contents := []byte("do not replace")
 	if err := os.WriteFile(socketPath, contents, 0o600); err != nil {
 		t.Fatal(err)
@@ -542,7 +543,7 @@ func TestNewServerRefusesToReplaceRegularFile(t *testing.T) {
 func TestNewServerRejectsDuplicateServer(t *testing.T) {
 	t.Parallel()
 
-	socketPath := filepath.Join(privateTransportTempDir(t), "onderzeeer.sock")
+	socketPath := filepath.Join(testutil.SocketDir(t), "onderzeeer.sock")
 	first, err := NewServer(socketPath, newIdleTransportManager(t), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -574,7 +575,7 @@ func TestNewServerRejectsDuplicateServer(t *testing.T) {
 func TestServerCloseRetainsOwnershipUntilInstancesStop(t *testing.T) {
 	t.Parallel()
 
-	root := privateTransportTempDir(t)
+	root := testutil.SocketDir(t)
 	socketPath := filepath.Join(root, "onderzeeer.sock")
 	configPath := filepath.Join(root, "worker.yaml")
 	runnerStarted := make(chan struct{})
@@ -652,7 +653,7 @@ func TestServerCloseRetainsOwnershipUntilInstancesStop(t *testing.T) {
 func TestNewServerProtectsAndCleansUpSocket(t *testing.T) {
 	t.Parallel()
 
-	socketDirectory := filepath.Join(t.TempDir(), "private-control")
+	socketDirectory := filepath.Join(testutil.SocketDir(t), "private-control")
 	socketPath := filepath.Join(socketDirectory, "onderzeeer.sock")
 	server, err := NewServer(socketPath, newIdleTransportManager(t), nil)
 	if err != nil {
@@ -693,7 +694,7 @@ func TestNewServerProtectsAndCleansUpSocket(t *testing.T) {
 func TestServerServeCancellationShutsDownRuntimes(t *testing.T) {
 	t.Parallel()
 
-	root := privateTransportTempDir(t)
+	root := testutil.SocketDir(t)
 	configPath := filepath.Join(root, "shutdown.yaml")
 	socketPath := filepath.Join(root, "onderzeeer.sock")
 	runnerStarted := make(chan struct{})
@@ -763,7 +764,7 @@ func TestServerServeCancellationShutsDownRuntimes(t *testing.T) {
 func newUnixTransportHarness(t *testing.T, options Options) (*Manager, *Client, string) {
 	t.Helper()
 	manager := newTestManager(t, options)
-	socketPath := filepath.Join(t.TempDir(), "control", "onderzeeer.sock")
+	socketPath := filepath.Join(testutil.SocketDir(t), "control", "onderzeeer.sock")
 	server, err := NewServer(socketPath, manager, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -800,13 +801,4 @@ func newIdleTransportManager(t *testing.T) *Manager {
 			return errors.New("unexpected runner invocation")
 		},
 	})
-}
-
-func privateTransportTempDir(t *testing.T) string {
-	t.Helper()
-	directory := t.TempDir()
-	if err := os.Chmod(directory, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	return directory
 }

@@ -12,13 +12,14 @@ import (
 	"time"
 
 	"github.com/GerhardOfRivia/onderzeeer/internal/control"
+	"github.com/GerhardOfRivia/onderzeeer/internal/testutil"
 )
 
 func TestDaemonStartsWithoutInstances(t *testing.T) {
 	root := t.TempDir()
 	configPath := writePlaceholderRunConfigAt(t, root, "worker.yaml")
 	t.Setenv("ONDERZEEER_CONFIG", configPath)
-	socket := filepath.Join(root, "control", "daemon.sock")
+	socket := filepath.Join(testutil.SocketDir(t), "control", "daemon.sock")
 	process := launchTestDaemon(t, root, socket)
 	client := control.NewClient(socket)
 	defer client.CloseIdleConnections()

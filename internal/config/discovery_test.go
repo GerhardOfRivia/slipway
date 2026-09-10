@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/GerhardOfRivia/onderzeeer/internal/testutil"
 )
 
 func TestDiscoverExplicitFileRegardlessOfExtension(t *testing.T) {
@@ -91,7 +93,7 @@ func TestDiscoverExplicitMissingPath(t *testing.T) {
 }
 
 func TestDiscoverExplicitRejectsNonFile(t *testing.T) {
-	socket := filepath.Join(t.TempDir(), "config.sock")
+	socket := filepath.Join(testutil.SocketDir(t), "config.sock")
 	listener, err := net.Listen("unix", socket)
 	if err != nil {
 		t.Skipf("Unix sockets unavailable: %v", err)

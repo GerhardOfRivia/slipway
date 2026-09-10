@@ -14,6 +14,7 @@ import (
 
 	"github.com/GerhardOfRivia/onderzeeer/internal/control"
 	"github.com/GerhardOfRivia/onderzeeer/internal/queue"
+	"github.com/GerhardOfRivia/onderzeeer/internal/testutil"
 )
 
 type testDaemonProcess struct {
@@ -109,7 +110,7 @@ func TestDaemonRecoversRegistrationsAndQueuesAfterProcessRestart(t *testing.T) {
 	for _, signal := range []os.Signal{syscall.SIGTERM, os.Kill} {
 		t.Run(signal.String(), func(t *testing.T) {
 			root := t.TempDir()
-			socket := filepath.Join(root, "control", "daemon.sock")
+			socket := filepath.Join(testutil.SocketDir(t), "control", "daemon.sock")
 			var paths []string
 			for _, name := range []string{"alpha", "beta"} {
 				watch := filepath.Join(root, name)
@@ -214,7 +215,7 @@ watches:
 
 func TestTestCommandDoesNotUseAvailableDaemon(t *testing.T) {
 	root := t.TempDir()
-	socket := filepath.Join(root, "control", "daemon.sock")
+	socket := filepath.Join(testutil.SocketDir(t), "control", "daemon.sock")
 	process := launchTestDaemon(t, root, socket)
 	t.Setenv("ONDERZEEER_SOCKET", socket)
 	path := writePlaceholderRunConfigAt(t, root, "foreground.yaml")
