@@ -93,32 +93,6 @@ type Executor interface {
 	Execute(context.Context, Command) (Result, error)
 }
 
-// Expand substitutes the supported file and job templates in arguments, the
-// working directory, output path, and environment values. It returns a
-// deep-enough copy for callers to safely retain as command history.
-func Expand(command Command, data TemplateData) Command {
-	return NewExpander(data).Command(command)
-}
-
-// Command expands templates throughout one executor command and returns a
-// copy that can be retained safely in history.
-func (expander Expander) Command(command Command) Command {
-	expanded := command
-	expanded.Args = make([]string, len(command.Args))
-	for i, arg := range command.Args {
-		expanded.Args[i] = expander.String(arg)
-	}
-	expanded.WorkingDir = expander.String(command.WorkingDir)
-	expanded.Output = expander.String(command.Output)
-	if command.Env != nil {
-		expanded.Env = make(map[string]string, len(command.Env))
-		for key, value := range command.Env {
-			expanded.Env[key] = expander.String(value)
-		}
-	}
-	return expanded
-}
-
 // Environment returns configured environment overrides in stable KEY=VALUE
 // order. It is useful when persisting the exact command specification.
 func Environment(values map[string]string) []string {

@@ -10,14 +10,16 @@ Type=simple
 User=slipway
 Group=slipway
 
-# Override either value in /etc/default/slipway when another bootstrap selection
-# or socket is preferred. The leading '-' makes the environment file optional.
-# Environment=SLIPWAY_CONFIG=/etc/slipway.d
+# Set the socket and optional dashboard in /etc/default/slipway.
+# The leading '-' makes the environment file optional.
 # Environment=SLIPWAY_SOCKET=/run/slipway/slipway.sock
 # Environment=SLIPWAY_WEB_LISTEN=127.0.0.1:8080
 # token-protected dashboard. It is intentionally disabled by default.
-EnvironmentFile=-/etc/default/slipway
+# EnvironmentFile=-/etc/default/slipway
+Environment=SLIPWAY_STATE_DIR=/var/lib/slipway
 
+# Register instances with slipway start; daemon restarts restore the registry.
+# with SELinux make sure you need to run; restorecon -v /usr/local/bin/slipwayd
 ExecStart=/usr/local/bin/slipwayd
 WorkingDirectory=/var/lib/slipway
 

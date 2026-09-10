@@ -97,6 +97,53 @@ func TestManagerStartStopListAndRetain(t *testing.T) {
 	}
 }
 
+func TestManagerGetResolvesNameAndIDPrefix(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	alphaPath := filepath.Join(root, "alpha.yaml")
+	betaPath := filepath.Join(root, "beta.yaml")
+	manager := newTestManager(t, Options{
+		Loader: mappedLoader(t, map[string]*config.Config{
+			alphaPath: testConfig(filepath.Join(root, "alpha.db")),
+			betaPath:  testConfig(filepath.Join(root, "beta.db")),
+		}),
+		Runner: func(ctx context.Context, _ *config.Config, _ *slog.Logger) error {
+			<-ctx.Done()
+			return ctx.Err()
+		},
+		IDGenerator: sequenceIDGenerator("abc111000001", "abc222000002"),
+	})
+
+	instances, err := manager.StartMany([]string{alphaPath, betaPath}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	byName, err := manager.Get("alpha")
+	if err != nil || byName.ID != instances[0].ID {
+		t.Fatalf("Get exact name = %+v, %v", byName, err)
+	}
+	byPrefix, err := manager.Get("abc111")
+	if err != nil || byPrefix.ID != instances[0].ID {
+		t.Fatalf("Get ID prefix = %+v, %v", byPrefix, err)
+	}
+	if _, err := manager.Get("abc"); !errors.Is(err, ErrAmbiguous) {
+		t.Fatalf("Get ambiguous prefix error = %v, want ErrAmbiguous", err)
+	}
+	if _, err := manager.Get("missing"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Get missing selector error = %v, want ErrNotFound", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if _, err := manager.Stop(ctx, instances[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	retained, err := manager.Get("alpha")
+	if err != nil || retained.State != StateExited {
+		t.Fatalf("Get retained instance = %+v, %v", retained, err)
+	}
+}
+
 func TestManagerRetainsKnownQueuesAfterInstancesStop(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

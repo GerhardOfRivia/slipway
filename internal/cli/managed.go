@@ -10,7 +10,6 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"text/tabwriter"
 	"time"
@@ -23,45 +22,45 @@ import (
 const controlTimeout = 30 * time.Second
 
 func startCommand(args []string, stdout, stderr io.Writer) error {
-	flags := newFlagSet("start", stderr, "slipway start [--config path] [--name name] [--socket path]")
-	configPath := flags.String("config", configPathDefault(), "YAML configuration file or directory")
-	name := flags.String("name", "", "instance name (only with one config)")
+	flags := newFlagSet("start", stderr, "slipway start <config-or-instance> [name] [--socket path]")
 	socketPath := flags.String("socket", "", "control socket (defaults to SLIPWAY_SOCKET or a per-user path)")
-	if err := flags.Parse(args); err != nil {
+	if err := parseFlags(flags, args); err != nil {
 		return err
 	}
-	if flags.NArg() != 0 {
-		return usageError{message: "start does not accept positional arguments; use --config path"}
+	if flags.NArg() > 2 {
+		return usageError{message: "start expects at most 2 positional arguments (config path, optional instance name)"}
 	}
 
-	paths, err := config.Discover(*configPath)
-	if err != nil {
-		return err
+	selection := flags.Arg(0)
+	if strings.TrimSpace(selection) == "" {
+		return usageError{message: "config path is required"}
 	}
-	if strings.TrimSpace(*name) != "" && len(paths) != 1 {
-		return usageError{message: "start --name requires a single configuration file"}
+	paths, instanceName := []string{selection}, strings.TrimSpace(flags.Arg(1))
+	if _, err := os.Stat(selection); err == nil || instanceName != "" {
+		var err error
+		paths, instanceName, err = discoverStartConfig(selection, instanceName)
+		if err != nil {
+			return err
+		}
 	}
 	client := control.NewClient(*socketPath)
+	defer client.CloseIdleConnections()
 	ctx, cancel := context.WithTimeout(context.Background(), controlTimeout)
 	defer cancel()
-	instances, err := client.Start(ctx, paths, *name)
+	instances, err := client.Start(ctx, paths, instanceName)
 	if err != nil {
 		return err
 	}
 	return printInstances(stdout, instances, false)
 }
 
-func runCommand(args []string, stdout, stderr io.Writer) error {
-	flags := newFlagSet("run", stderr, "slipway run [--rm] [--config path] [--name name] [--socket path]")
-	remove := flags.Bool("rm", false, "remove daemon-managed instances when they exit")
-	configPath := flags.String("config", configPathDefault(), "YAML configuration file or directory")
-	name := flags.String("name", "", "instance name or daemonless log label (only with one config)")
-	socketPath := flags.String("socket", "", "control socket (defaults to SLIPWAY_SOCKET or a per-user path)")
-	if err := flags.Parse(args); err != nil {
+func testCommand(args []string, stdout, stderr io.Writer) error {
+	flags := newFlagSet("test", stderr, "slipway test <config>")
+	if err := parseFlags(flags, args); err != nil {
 		return err
 	}
-	if flags.NArg() != 0 {
-		return usageError{message: "run does not accept positional arguments; use --config path"}
+	if err := requireArguments(flags, "config path"); err != nil {
+		return err
 	}
 
 	runContext, cancelRun := context.WithCancel(context.Background())
@@ -82,239 +81,47 @@ func runCommand(args []string, stdout, stderr io.Writer) error {
 		}
 	}()
 
-	client := control.NewClient(*socketPath)
-	defer client.CloseIdleConnections()
-	return runSelectedConfigsPreferDaemon(
-		runContext,
-		*configPath,
-		*name,
-		stdout,
-		stderr,
-		*remove,
-		client,
-		daemon.RunMany,
-	)
+	return testSelectedConfig(runContext, flags.Arg(0), stdout, daemon.RunMany)
+}
+
+func testSelectedConfig(ctx context.Context, selection string, output io.Writer, runner selectedConfigRunner) error {
+	paths, _, err := discoverSingleConfig(selection, "")
+	if err != nil {
+		return err
+	}
+	if runner == nil {
+		return errors.New("test: local runner is required")
+	}
+	cfg, err := config.Load(paths[0])
+	if err != nil {
+		return fmt.Errorf("load %s: %w", paths[0], err)
+	}
+	logger := slog.New(slog.NewTextHandler(output, nil))
+	err = runner(ctx, []daemon.NamedConfig{{Path: paths[0], Config: cfg}}, logger)
+	if cancellationOnlyFrom(err, ctx.Err()) {
+		return nil
+	}
+	return err
 }
 
 type selectedConfigRunner func(context.Context, []daemon.NamedConfig, *slog.Logger) error
 
-type runControlClient interface {
-	SocketPath() string
-	List(context.Context, bool) ([]control.Instance, error)
-	RunWithOptions(context.Context, string, string, control.RunOptions, func(control.RunEvent) error) (control.Instance, error)
-	Stop(context.Context, string) (control.Instance, error)
+func discoverStartConfig(selection, name string) ([]string, string, error) {
+	if strings.TrimSpace(selection) == "" {
+		return nil, "", usageError{message: "config path is required"}
+	}
+	return discoverSingleConfig(selection, strings.TrimSpace(name))
 }
 
-func runSelectedConfigsPreferDaemon(
-	ctx context.Context,
-	selection, name string,
-	stdout, stderr io.Writer,
-	remove bool,
-	client runControlClient,
-	localRunner selectedConfigRunner,
-) error {
-	paths, name, err := discoverRunConfigs(selection, name)
-	if err != nil {
-		return err
-	}
-	if client == nil {
-		return errors.New("run: control client is required")
-	}
-
-	probeContext, cancelProbe := context.WithTimeout(ctx, controlTimeout)
-	_, err = client.List(probeContext, false)
-	cancelProbe()
-	if err == nil {
-		return runDaemonConfigs(ctx, paths, name, remove, stdout, client)
-	}
-	if ctx.Err() != nil && cancellationOnlyFrom(err, ctx.Err()) {
-		return nil
-	}
-	if !daemonNotRunning(err) {
-		return fmt.Errorf("check daemon at %s: %w", client.SocketPath(), err)
-	}
-
-	slog.New(slog.NewTextHandler(stderr, nil)).Info(
-		"slipway daemon not running; running daemonless",
-		"socket", client.SocketPath(),
-	)
-	return runConfigPaths(ctx, paths, name, stdout, localRunner)
-}
-
-func runSelectedConfigs(ctx context.Context, selection, name string, output io.Writer, runner selectedConfigRunner) error {
-	paths, name, err := discoverRunConfigs(selection, name)
-	if err != nil {
-		return err
-	}
-	return runConfigPaths(ctx, paths, name, output, runner)
-}
-
-func discoverRunConfigs(selection, name string) ([]string, string, error) {
+func discoverSingleConfig(selection, name string) ([]string, string, error) {
 	paths, err := config.Discover(selection)
 	if err != nil {
 		return nil, "", err
 	}
-	name = strings.TrimSpace(name)
-	if name != "" && len(paths) != 1 {
-		return nil, "", usageError{message: "run --name requires a single configuration file"}
+	if len(paths) != 1 {
+		return nil, "", usageError{message: "config path must select a single configuration file"}
 	}
 	return paths, name, nil
-}
-
-func runConfigPaths(
-	ctx context.Context,
-	paths []string,
-	name string,
-	output io.Writer,
-	runner selectedConfigRunner,
-) error {
-	if runner == nil {
-		return errors.New("run: local runner is required")
-	}
-	loaded, err := loadConfigPaths(paths)
-	if err != nil {
-		return err
-	}
-	if name != "" && len(loaded) != 1 {
-		return usageError{message: "run --name requires a single configuration file"}
-	}
-	configs := make([]daemon.NamedConfig, 0, len(loaded))
-	for _, item := range loaded {
-		configs = append(configs, daemon.NamedConfig{Path: item.path, Config: item.config})
-	}
-	logger := slog.New(slog.NewTextHandler(output, nil))
-	if name != "" {
-		logger = logger.With("name", name)
-	}
-	return runner(ctx, configs, logger)
-}
-
-func runDaemonConfigs(
-	ctx context.Context,
-	paths []string,
-	name string,
-	remove bool,
-	output io.Writer,
-	client runControlClient,
-) error {
-	runContext, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	type result struct {
-		path string
-		err  error
-	}
-	results := make(chan result, len(paths))
-	stream := &lockedWriter{writer: output}
-	for _, path := range paths {
-		path := path
-		go func() {
-			results <- result{
-				path: path,
-				err:  runDaemonConfig(runContext, path, name, remove, stream, client),
-			}
-		}()
-	}
-
-	var firstError error
-	for range paths {
-		outcome := <-results
-		if outcome.err == nil {
-			continue
-		}
-		if cancellationOnlyFrom(outcome.err, ctx.Err()) {
-			continue
-		}
-		if firstError != nil && cancellationOnlyFrom(outcome.err, runContext.Err()) {
-			continue
-		}
-		wrapped := fmt.Errorf("daemon run config %q: %w", outcome.path, outcome.err)
-		if firstError == nil {
-			firstError = wrapped
-			cancel()
-			continue
-		}
-		firstError = errors.Join(firstError, wrapped)
-	}
-	return firstError
-}
-
-func runDaemonConfig(
-	ctx context.Context,
-	path, name string,
-	remove bool,
-	output io.Writer,
-	client runControlClient,
-) error {
-	var started control.Instance
-	finished, err := client.RunWithOptions(ctx, path, name, control.RunOptions{RemoveOnExit: remove}, func(event control.RunEvent) error {
-		switch event.Type {
-		case "started":
-			started = event.Instance
-		case "log":
-			return writeRunLog(output, event.Log)
-		}
-		return nil
-	})
-	if started.ID == "" && finished.ID != "" {
-		started = finished
-	}
-	if err != nil {
-		if started.ID != "" {
-			stopContext, cancelStop := context.WithTimeout(context.Background(), controlTimeout)
-			_, stopErr := client.Stop(stopContext, started.ID)
-			cancelStop()
-			if stopErr != nil && !terminalStopRace(stopErr) {
-				err = errors.Join(err, fmt.Errorf("stop daemon instance %s: %w", started.ID, stopErr))
-			}
-		}
-		return err
-	}
-
-	switch finished.State {
-	case control.StateExited:
-		return nil
-	case control.StateFailed:
-		detail := strings.TrimSpace(finished.Error)
-		if detail == "" {
-			detail = "instance failed without an error message"
-		}
-		return errors.New(detail)
-	default:
-		return fmt.Errorf("daemon run ended in unexpected state %q", finished.State)
-	}
-}
-
-func writeRunLog(output io.Writer, value string) error {
-	if _, err := io.WriteString(output, value); err != nil {
-		return err
-	}
-	if !strings.HasSuffix(value, "\n") {
-		_, err := fmt.Fprintln(output)
-		return err
-	}
-	return nil
-}
-
-type lockedWriter struct {
-	mu     sync.Mutex
-	writer io.Writer
-}
-
-func (writer *lockedWriter) Write(value []byte) (int, error) {
-	writer.mu.Lock()
-	defer writer.mu.Unlock()
-	return writer.writer.Write(value)
-}
-
-func daemonNotRunning(err error) bool {
-	return errors.Is(err, control.ErrDaemonUnavailable) &&
-		(errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ECONNREFUSED))
-}
-
-func terminalStopRace(err error) bool {
-	var apiError *control.APIError
-	return errors.As(err, &apiError) && (apiError.Code == "not_active" || apiError.Code == "not_found")
 }
 
 func cancellationOnlyFrom(err, contextErr error) bool {
@@ -344,7 +151,7 @@ func psCommand(args []string, stdout, stderr io.Writer) error {
 	all := flags.Bool("all", false, "include exited and failed instances")
 	flags.BoolVar(all, "a", false, "include exited and failed instances")
 	socketPath := flags.String("socket", "", "control socket (defaults to SLIPWAY_SOCKET or a per-user path)")
-	if err := flags.Parse(args); err != nil {
+	if err := parseFlags(flags, args); err != nil {
 		return err
 	}
 	if flags.NArg() != 0 {
@@ -352,6 +159,7 @@ func psCommand(args []string, stdout, stderr io.Writer) error {
 	}
 
 	client := control.NewClient(*socketPath)
+	defer client.CloseIdleConnections()
 	ctx, cancel := context.WithTimeout(context.Background(), controlTimeout)
 	defer cancel()
 	instances, err := client.List(ctx, *all)
@@ -364,7 +172,7 @@ func psCommand(args []string, stdout, stderr io.Writer) error {
 func stopCommand(args []string, stdout, stderr io.Writer) error {
 	flags := newFlagSet("stop", stderr, "slipway stop [--socket path] <id-or-name> [id-or-name ...]")
 	socketPath := flags.String("socket", "", "control socket (defaults to SLIPWAY_SOCKET or a per-user path)")
-	if err := flags.Parse(args); err != nil {
+	if err := parseFlags(flags, args); err != nil {
 		return err
 	}
 	if flags.NArg() == 0 {
@@ -372,6 +180,7 @@ func stopCommand(args []string, stdout, stderr io.Writer) error {
 	}
 
 	client := control.NewClient(*socketPath)
+	defer client.CloseIdleConnections()
 	var stopped []control.Instance
 	var stopErrors []error
 	for _, selector := range flags.Args() {
@@ -393,18 +202,22 @@ func stopCommand(args []string, stdout, stderr io.Writer) error {
 func printInstances(output io.Writer, instances []control.Instance, all bool) error {
 	w := tabwriter.NewWriter(output, 0, 4, 2, ' ', 0)
 	if all {
-		fmt.Fprintln(w, "ID\tNAME\tSTATUS\tSTARTED\tFINISHED\tCONFIG\tERROR")
+		fmt.Fprintln(w, "ID\tNAME\tSTATUS\tDESIRED\tSTARTED\tFINISHED\tCONFIG\tERROR")
 	} else {
 		fmt.Fprintln(w, "ID\tNAME\tSTATUS\tSTARTED\tCONFIG")
 	}
 	for _, instance := range instances {
 		if all {
+			desired := instance.DesiredState
+			if desired == "" {
+				desired = "-"
+			}
 			errorText := "-"
 			if instance.Error != "" {
 				errorText = strconv.Quote(instance.Error)
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				instance.ID, instance.Name, instance.State, formatTime(instance.StartedAt),
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				instance.ID, instance.Name, instance.State, desired, formatTime(instance.StartedAt),
 				formatOptionalTime(instance.FinishedAt), strconv.Quote(instance.ConfigPath), errorText)
 			continue
 		}

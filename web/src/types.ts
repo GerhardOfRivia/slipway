@@ -21,6 +21,7 @@ export interface Instance {
   config_hash: string
   database_path: string
   state: InstanceState
+  desired_state?: 'running' | 'stopped'
   created_at: string
   started_at: string
   finished_at?: string

@@ -7,19 +7,28 @@ import (
 )
 
 func checkCommand(args []string, stdout, stderr io.Writer) error {
-	flags := newFlagSet("check", stderr, "slipway check [--raw] [--config path]")
-	configPath := flags.String("config", configPathDefault(), "YAML configuration file or directory")
+	flags := newFlagSet("check", stderr, "slipway check [--raw] <config>")
 	raw := flags.Bool("raw", false, "display the exact program and JSON argument array")
-	if err := flags.Parse(args); err != nil {
+	if err := parseFlags(flags, args); err != nil {
 		return err
 	}
-	if flags.NArg() != 0 {
-		return usageError{message: "check does not accept positional arguments"}
+	if err := requireArguments(flags, "config path"); err != nil {
+		return err
 	}
 
-	configs, err := loadConfigs(*configPath)
+	configs, err := loadConfigs(flags.Arg(0))
 	if err != nil {
 		return err
+	}
+	for _, item := range configs {
+		for _, watch := range item.config.Watches {
+			for index, command := range watch.Pipeline {
+				for _, warning := range command.Warnings() {
+					fmt.Fprintf(stderr, "slipway check: warning: %s: watch %q, step %d (%q): %s\n",
+						item.path, watch.Name, index+1, command.Name, warning)
+				}
+			}
+		}
 	}
 	return printPipelines(stdout, configs, *raw)
 }

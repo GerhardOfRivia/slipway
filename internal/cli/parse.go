@@ -86,6 +86,10 @@ func parseCommand(args []string, stdout, stderr io.Writer) error {
 			fmt.Fprintf(stderr, "slipway parse: warning: %s; emitted raw runtime args\n", fallbackReason)
 		}
 	}
+	command := config.CommandConfig{Executor: executor, Program: program, Args: commandArgs}
+	for _, warning := range command.Warnings() {
+		fmt.Fprintf(stderr, "slipway parse: warning: %s\n", warning)
+	}
 
 	encoder := yaml.NewEncoder(stdout)
 	encoder.SetIndent(2)

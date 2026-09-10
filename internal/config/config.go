@@ -414,6 +414,16 @@ func containerTargetCanBeAbsolute(target string) bool {
 // Load decodes, defaults, and validates a YAML configuration file. Unknown
 // fields are rejected so configuration typos fail at startup.
 func Load(filename string) (*Config, error) {
+	return load(filename, false)
+}
+
+// LoadManaged loads a config for daemon registration. database.path belongs to
+// standalone runs; the supervisor assigns the managed queue after loading.
+func LoadManaged(filename string) (*Config, error) {
+	return load(filename, true)
+}
+
+func load(filename string, managed bool) (*Config, error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return nil, fmt.Errorf("open config: %w", err)
@@ -441,11 +451,14 @@ func Load(filename string) (*Config, error) {
 		return nil, fmt.Errorf("inspect config fields: %w", err)
 	}
 
+	if managed {
+		cfg.Database.Path = defaultDatabasePath
+	}
 	cfg.ApplyDefaults()
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
-	if err := resolveConfiguredPaths(&cfg, filename); err != nil {
+	if err := resolveConfiguredPaths(&cfg, filename, !managed); err != nil {
 		return nil, err
 	}
 	return &cfg, nil

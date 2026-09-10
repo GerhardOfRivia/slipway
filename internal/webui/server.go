@@ -263,10 +263,6 @@ func (server *Server) Close() error {
 	return server.closeErr
 }
 
-func newHandler(manager *control.Manager, logger *slog.Logger, token, version string) (http.Handler, error) {
-	return newHandlerForListener(manager, logger, token, version, false)
-}
-
 func newHandlerForListener(manager *control.Manager, logger *slog.Logger, token, version string, allowRemoteIPHosts bool) (http.Handler, error) {
 	dist, err := fs.Sub(embeddedAssets, "dist")
 	if err != nil {

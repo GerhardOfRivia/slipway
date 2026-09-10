@@ -31,6 +31,13 @@ func Run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
+	for _, watch := range cfg.Watches {
+		for index, command := range watch.Pipeline {
+			for _, warning := range command.Warnings() {
+				logger.Warn(warning, "watch", watch.Name, "step", index+1, "command", command.Name)
+			}
+		}
+	}
 
 	store, err := queue.Open(cfg.Database.Path)
 	if err != nil {

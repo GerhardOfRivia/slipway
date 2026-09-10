@@ -35,8 +35,8 @@ var (
 )
 
 // Server exposes a Manager through a versioned HTTP/JSON API on a Unix socket.
-// NewServer acquires the socket immediately, before any instance bootstrap can
-// occur, so a second daemon cannot race the first daemon's startup.
+// NewServer acquires the socket immediately, before instances are restored or
+// started, so a second daemon cannot race the first daemon's startup.
 type Server struct {
 	manager *Manager
 	logger  *slog.Logger
@@ -129,8 +129,11 @@ func NewServer(socketPath string, manager *Manager, logger *slog.Logger) (*Serve
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/instances", server.handleStart)
 	mux.HandleFunc("GET /v1/instances", server.handleList)
+	mux.HandleFunc("GET /v1/instances/{selector}", server.handleGet)
 	mux.HandleFunc("POST /v1/instances/{selector}/stop", server.handleStop)
 	mux.HandleFunc("POST /v1/run", server.handleRun)
+	mux.HandleFunc("GET /v1/queues", server.handleQueueSelection)
+	mux.HandleFunc("GET /v1/queues/{selector}/{operation}", server.handleQueueRead)
 	server.httpServer = &http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
@@ -385,6 +388,20 @@ func (server *Server) handleList(output http.ResponseWriter, request *http.Reque
 		all = parsed
 	}
 	writeJSON(output, http.StatusOK, instancesResponse{Instances: server.manager.List(all)})
+}
+
+func (server *Server) handleGet(output http.ResponseWriter, request *http.Request) {
+	selector := request.PathValue("selector")
+	if strings.TrimSpace(selector) == "" {
+		writeAPIError(output, http.StatusBadRequest, "invalid_request", errors.New("instance selector is required"))
+		return
+	}
+	instance, err := server.manager.Get(selector)
+	if err != nil {
+		writeManagerError(output, err, false)
+		return
+	}
+	writeJSON(output, http.StatusOK, instanceResponse{Instance: instance})
 }
 
 func (server *Server) handleStop(output http.ResponseWriter, request *http.Request) {

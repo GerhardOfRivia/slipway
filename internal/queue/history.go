@@ -168,19 +168,6 @@ ORDER BY attempt, id`, jobID)
 	return runs, nil
 }
 
-// GetRun retrieves a run by ID.
-func (s *Store) GetRun(ctx context.Context, id int64) (*Run, error) {
-	run, err := scanRun(s.db.QueryRowContext(ctx,
-		"SELECT "+runColumns+" FROM runs WHERE id = ?", id))
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("queue: get run %d: %w", id, ErrNotFound)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("queue: get run %d: %w", id, err)
-	}
-	return &run, nil
-}
-
 const commandColumns = `
 id, run_id, sequence, name, program, args_json, env_json, working_dir,
 timeout_ns, status, exit_code, stdout, stderr, error, started_at, finished_at`
@@ -254,19 +241,6 @@ ORDER BY sequence, id`, runID)
 		return nil, fmt.Errorf("queue: list commands: %w", err)
 	}
 	return commands, nil
-}
-
-// GetCommand retrieves a command execution by ID.
-func (s *Store) GetCommand(ctx context.Context, id int64) (*CommandExecution, error) {
-	command, err := scanCommand(s.db.QueryRowContext(ctx,
-		"SELECT "+commandColumns+" FROM command_executions WHERE id = ?", id))
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("queue: get command %d: %w", id, ErrNotFound)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("queue: get command %d: %w", id, err)
-	}
-	return &command, nil
 }
 
 const commandSummaryColumns = `

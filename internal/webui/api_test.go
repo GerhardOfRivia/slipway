@@ -20,6 +20,10 @@ import (
 	"github.com/GerhardOfRivia/slipway/internal/queue"
 )
 
+func newHandler(manager *control.Manager, logger *slog.Logger, token, version string) (http.Handler, error) {
+	return newHandlerForListener(manager, logger, token, version, false)
+}
+
 const testWebToken = "test-web-token"
 
 func TestInfoAPIReportsDaemonVersion(t *testing.T) {

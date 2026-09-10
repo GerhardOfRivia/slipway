@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -12,7 +11,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -76,14 +74,14 @@ func TestManagedCommandsLifecycle(t *testing.T) {
 	})
 
 	code, stdout, stderr := managedCLI(t,
-		"start", "--config", configPath, "--name", "nightly", "--socket", socketPath,
+		"start", configPath, "--socket", socketPath,
 	)
 	if code != 0 || stderr != "" {
 		t.Fatalf("start code/stderr = %d, %q", code, stderr)
 	}
 	wantActiveFields := []string{
 		"ID", "NAME", "STATUS", "STARTED", "CONFIG",
-		"abc123def456", "nightly", "running", startedAt.Format(time.RFC3339Nano), strconv.Quote(configPath),
+		"abc123def456", "worker", "running", startedAt.Format(time.RFC3339Nano), strconv.Quote(configPath),
 	}
 	if got := strings.Fields(stdout); !reflect.DeepEqual(got, wantActiveFields) {
 		t.Fatalf("start output fields = %q, want %q", got, wantActiveFields)
@@ -102,7 +100,7 @@ func TestManagedCommandsLifecycle(t *testing.T) {
 		t.Fatalf("ps output fields = %q, want %q", got, wantActiveFields)
 	}
 
-	code, stdout, stderr = managedCLI(t, "stop", "--socket", socketPath, "nightly")
+	code, stdout, stderr = managedCLI(t, "stop", "--socket", socketPath, "worker")
 	if code != 0 || stderr != "" {
 		t.Fatalf("stop code/stderr = %d, %q", code, stderr)
 	}
@@ -129,8 +127,8 @@ func TestManagedCommandsLifecycle(t *testing.T) {
 		t.Fatalf("ps --all code/stderr = %d, %q", code, stderr)
 	}
 	wantAllFields := []string{
-		"ID", "NAME", "STATUS", "STARTED", "FINISHED", "CONFIG", "ERROR",
-		"abc123def456", "nightly", "exited", startedAt.Format(time.RFC3339Nano),
+		"ID", "NAME", "STATUS", "DESIRED", "STARTED", "FINISHED", "CONFIG", "ERROR",
+		"abc123def456", "worker", "exited", "-", startedAt.Format(time.RFC3339Nano),
 		startedAt.Format(time.RFC3339Nano), strconv.Quote(configPath), "-",
 	}
 	if got := strings.Fields(stdout); !reflect.DeepEqual(got, wantAllFields) {
@@ -154,7 +152,7 @@ func TestManagedCommandsReportUnavailableDaemon(t *testing.T) {
 		name string
 		args []string
 	}{
-		{name: "start", args: []string{"start", "--config", configPath, "--socket", socketPath}},
+		{name: "start", args: []string{"start", configPath, "--socket", socketPath}},
 		{name: "ps", args: []string{"ps", "--socket", socketPath}},
 		{name: "stop", args: []string{"stop", "--socket", socketPath, "nightly"}},
 	}
@@ -178,7 +176,7 @@ func TestManagedCommandsReportUnavailableDaemon(t *testing.T) {
 	}
 }
 
-func TestRunCommandFallsBackLocallyWithoutDaemon(t *testing.T) {
+func TestTestCommandRunsLocallyWithoutNameOrDaemon(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "worker.yaml")
 	databasePath := filepath.Join(root, "worker.db")
@@ -198,12 +196,13 @@ watches:
 	}
 
 	missingSocket := filepath.Join(root, "missing.sock")
-	code, stdout, stderr := managedCLI(t, "run", "--config", configPath, "--name", "local-worker", "--socket", missingSocket)
+	t.Setenv("SLIPWAY_SOCKET", missingSocket)
+	code, stdout, stderr := managedCLI(t, "test", configPath)
 	if code != 1 {
 		t.Fatalf("run code = %d, want 1; stdout = %q, stderr = %q", code, stdout, stderr)
 	}
-	if !strings.Contains(stderr, "slipway daemon not running; running daemonless") || !strings.Contains(stderr, missingSocket) {
-		t.Fatalf("run stderr = %q, want daemonless fallback notice for %s", stderr, missingSocket)
+	if strings.Contains(stderr, missingSocket) {
+		t.Fatalf("standalone run contacted the daemon: %s", stderr)
 	}
 	if !strings.Contains(stderr, "is not a directory") || !strings.Contains(stderr, configPath) {
 		t.Fatalf("run stderr = %q, want local runtime error for %s", stderr, configPath)
@@ -213,433 +212,7 @@ watches:
 	}
 }
 
-func TestRunCommandUsesAvailableDaemon(t *testing.T) {
-	root := t.TempDir()
-	configPath := filepath.Join(root, "worker.yaml")
-	databasePath := filepath.Join(root, "worker.db")
-	if err := os.WriteFile(configPath, []byte("# accepted by the daemon's injected loader\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	runnerCalled := make(chan struct{}, 1)
-	manager, err := control.NewManager(control.Options{
-		Loader: func(path string) (*config.Config, error) {
-			if path != configPath {
-				return nil, fmt.Errorf("unexpected config path %q", path)
-			}
-			return &config.Config{Database: config.DatabaseConfig{Path: databasePath}}, nil
-		},
-		Runner: func(_ context.Context, _ *config.Config, logger *slog.Logger) error {
-			runnerCalled <- struct{}{}
-			logger.Info("daemon-backed payload", "sequence", 7)
-			return nil
-		},
-		IDGenerator: func() (string, error) { return "abc123def456", nil },
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	socketPath := filepath.Join(root, "control", "slipway.sock")
-	server, err := control.NewServer(socketPath, manager, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	serveContext, cancelServe := context.WithCancel(context.Background())
-	serveDone := make(chan error, 1)
-	go func() { serveDone <- server.Serve(serveContext) }()
-	t.Cleanup(func() {
-		cancelServe()
-		select {
-		case err := <-serveDone:
-			if err != nil {
-				t.Errorf("control server shutdown: %v", err)
-			}
-		case <-time.After(3 * time.Second):
-			_ = server.Close()
-			t.Error("timed out waiting for control server shutdown")
-		}
-	})
-
-	code, stdout, stderr := managedCLI(t,
-		"run", "--config", configPath, "--name", "foreground", "--socket", socketPath,
-	)
-	if code != 0 || stderr != "" {
-		t.Fatalf("run code/stderr = %d, %q; stdout = %q", code, stderr, stdout)
-	}
-	if !strings.Contains(stdout, "daemon-backed payload") || !strings.Contains(stdout, "sequence=7") {
-		t.Fatalf("run stdout = %q, want streamed daemon log", stdout)
-	}
-	if strings.Contains(stdout, "daemonless") {
-		t.Fatalf("run stdout = %q, want no fallback notice", stdout)
-	}
-	select {
-	case <-runnerCalled:
-	default:
-		t.Fatal("run did not invoke the daemon-managed runner")
-	}
-	instances := manager.List(true)
-	if len(instances) != 1 || instances[0].Name != "foreground" || instances[0].State != control.StateExited {
-		t.Fatalf("daemon instances after run = %+v", instances)
-	}
-}
-
-func TestRunCommandRemovesDaemonInstance(t *testing.T) {
-	tests := []struct {
-		name       string
-		runnerErr  error
-		wantCode   int
-		wantStderr string
-	}{
-		{name: "exited", wantCode: 0},
-		{name: "failed", runnerErr: errors.New("runner exploded"), wantCode: 1, wantStderr: "runner exploded"},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			root := t.TempDir()
-			configPath := filepath.Join(root, "worker.yaml")
-			databasePath := filepath.Join(root, "worker.db")
-			if err := os.WriteFile(configPath, []byte("# accepted by the daemon's injected loader\n"), 0o600); err != nil {
-				t.Fatal(err)
-			}
-
-			manager, err := control.NewManager(control.Options{
-				Loader: func(path string) (*config.Config, error) {
-					if path != configPath {
-						return nil, fmt.Errorf("unexpected config path %q", path)
-					}
-					return &config.Config{Database: config.DatabaseConfig{Path: databasePath}}, nil
-				},
-				Runner:      func(context.Context, *config.Config, *slog.Logger) error { return test.runnerErr },
-				IDGenerator: func() (string, error) { return "abc123def456", nil },
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			socketPath := filepath.Join(root, "control", "slipway.sock")
-			server, err := control.NewServer(socketPath, manager, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			serveContext, cancelServe := context.WithCancel(context.Background())
-			serveDone := make(chan error, 1)
-			go func() { serveDone <- server.Serve(serveContext) }()
-			t.Cleanup(func() {
-				cancelServe()
-				select {
-				case err := <-serveDone:
-					if err != nil {
-						t.Errorf("control server shutdown: %v", err)
-					}
-				case <-time.After(3 * time.Second):
-					_ = server.Close()
-					t.Error("timed out waiting for control server shutdown")
-				}
-			})
-
-			code, _, stderr := managedCLI(t,
-				"run", "--rm", "--config", configPath, "--name", "ephemeral", "--socket", socketPath,
-			)
-			if code != test.wantCode {
-				t.Fatalf("run --rm code = %d, want %d; stderr = %q", code, test.wantCode, stderr)
-			}
-			if test.wantStderr == "" && stderr != "" {
-				t.Fatalf("run --rm stderr = %q, want empty", stderr)
-			}
-			if test.wantStderr != "" && !strings.Contains(stderr, test.wantStderr) {
-				t.Fatalf("run --rm stderr = %q, want it to contain %q", stderr, test.wantStderr)
-			}
-			if instances := manager.List(true); len(instances) != 0 {
-				t.Fatalf("daemon instances after run --rm = %+v, want none", instances)
-			}
-		})
-	}
-}
-
-func TestRunSelectionPrefersDaemonAndStreamsLogs(t *testing.T) {
-	configPath := writePlaceholderRunConfig(t, "worker.yaml")
-	localCalled := false
-	client := &stubRunControlClient{
-		socketPath: "/private/slipway.sock",
-		run: func(_ context.Context, path, name string, remove bool, onEvent func(control.RunEvent) error) (control.Instance, error) {
-			if path != configPath || name != "nightly" {
-				t.Fatalf("daemon Run path/name = %q, %q", path, name)
-			}
-			if remove {
-				t.Fatal("daemon Run remove = true without --rm")
-			}
-			instance := control.Instance{ID: "000000000001", State: control.StateRunning}
-			if err := onEvent(control.RunEvent{Type: "started", Instance: instance}); err != nil {
-				return instance, err
-			}
-			if err := onEvent(control.RunEvent{Type: "log", Log: "daemon payload\n"}); err != nil {
-				return instance, err
-			}
-			instance.State = control.StateExited
-			return instance, nil
-		},
-	}
-	var stdout, stderr bytes.Buffer
-	err := runSelectedConfigsPreferDaemon(
-		context.Background(), configPath, " nightly ", &stdout, &stderr, false, client,
-		func(context.Context, []daemon.NamedConfig, *slog.Logger) error {
-			localCalled = true
-			return nil
-		},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if localCalled {
-		t.Fatal("daemonless runner was called while daemon was available")
-	}
-	if got, want := stdout.String(), "daemon payload\n"; got != want {
-		t.Fatalf("stdout = %q, want %q", got, want)
-	}
-	if stderr.Len() != 0 {
-		t.Fatalf("stderr = %q, want empty", stderr.String())
-	}
-}
-
-func TestRunSelectionFallsBackOnlyWhenDaemonIsNotRunning(t *testing.T) {
-	configPath := writePlaceholderRunConfig(t, "worker.yaml")
-	t.Run("missing listener", func(t *testing.T) {
-		localCalled := false
-		client := &stubRunControlClient{
-			socketPath: "/private/missing.sock",
-			listErr: &control.DaemonUnavailableError{
-				SocketPath: "/private/missing.sock",
-				Err:        syscall.ENOENT,
-			},
-		}
-		var stdout, stderr bytes.Buffer
-		err := runSelectedConfigsPreferDaemon(
-			context.Background(), configPath, "", &stdout, &stderr, true, client,
-			func(_ context.Context, configs []daemon.NamedConfig, logger *slog.Logger) error {
-				localCalled = true
-				if len(configs) != 1 || configs[0].Path != configPath {
-					t.Fatalf("daemonless configs = %+v", configs)
-				}
-				logger.Info("local payload")
-				return nil
-			},
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !localCalled {
-			t.Fatal("daemonless runner was not called")
-		}
-		if !strings.Contains(stderr.String(), "slipway daemon not running; running daemonless") ||
-			!strings.Contains(stderr.String(), client.socketPath) {
-			t.Fatalf("stderr = %q, want fallback notice", stderr.String())
-		}
-		if !strings.Contains(stdout.String(), "local payload") {
-			t.Fatalf("stdout = %q, want daemonless log", stdout.String())
-		}
-	})
-
-	t.Run("permission denied", func(t *testing.T) {
-		localCalled := false
-		client := &stubRunControlClient{
-			socketPath: "/private/denied.sock",
-			listErr: &control.DaemonUnavailableError{
-				SocketPath: "/private/denied.sock",
-				Err:        syscall.EACCES,
-			},
-		}
-		var stdout, stderr bytes.Buffer
-		err := runSelectedConfigsPreferDaemon(
-			context.Background(), configPath, "", &stdout, &stderr, false, client,
-			func(context.Context, []daemon.NamedConfig, *slog.Logger) error {
-				localCalled = true
-				return nil
-			},
-		)
-		if !errors.Is(err, syscall.EACCES) || !strings.Contains(err.Error(), "check daemon") {
-			t.Fatalf("error = %v, want daemon permission error", err)
-		}
-		if localCalled {
-			t.Fatal("permission error triggered daemonless execution")
-		}
-		if stdout.Len() != 0 || stderr.Len() != 0 {
-			t.Fatalf("stdout/stderr = %q / %q, want empty", stdout.String(), stderr.String())
-		}
-	})
-}
-
-func TestRunSelectionDoesNotFallBackAfterDaemonRunFailure(t *testing.T) {
-	configPath := writePlaceholderRunConfig(t, "worker.yaml")
-	localCalled := false
-	want := &control.APIError{StatusCode: 422, Code: "start_failed", Message: "invalid daemon config"}
-	client := &stubRunControlClient{
-		socketPath: "/private/slipway.sock",
-		run: func(context.Context, string, string, bool, func(control.RunEvent) error) (control.Instance, error) {
-			return control.Instance{}, want
-		},
-	}
-	err := runSelectedConfigsPreferDaemon(
-		context.Background(), configPath, "", io.Discard, io.Discard, false, client,
-		func(context.Context, []daemon.NamedConfig, *slog.Logger) error {
-			localCalled = true
-			return nil
-		},
-	)
-	if !errors.Is(err, want) {
-		t.Fatalf("error = %v, want %v", err, want)
-	}
-	if localCalled {
-		t.Fatal("daemon run failure triggered daemonless execution")
-	}
-}
-
-func TestRunSelectionReportsDaemonManagedFailure(t *testing.T) {
-	configPath := writePlaceholderRunConfig(t, "worker.yaml")
-	client := &stubRunControlClient{
-		socketPath: "/private/slipway.sock",
-		run: func(context.Context, string, string, bool, func(control.RunEvent) error) (control.Instance, error) {
-			return control.Instance{ID: "000000000002", State: control.StateFailed, Error: "runner exploded"}, nil
-		},
-	}
-	err := runSelectedConfigsPreferDaemon(
-		context.Background(), configPath, "", io.Discard, io.Discard, false, client,
-		func(context.Context, []daemon.NamedConfig, *slog.Logger) error {
-			t.Fatal("daemonless runner was called")
-			return nil
-		},
-	)
-	if err == nil || !strings.Contains(err.Error(), "runner exploded") {
-		t.Fatalf("error = %v, want daemon runner failure", err)
-	}
-}
-
-func TestRunSelectionUsesDaemonConcurrentlyForDirectoryWithRemove(t *testing.T) {
-	root := t.TempDir()
-	configDirectory := filepath.Join(root, "configs")
-	if err := os.Mkdir(configDirectory, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	paths := []string{
-		writePlaceholderRunConfigAt(t, configDirectory, "first.yaml"),
-		writePlaceholderRunConfigAt(t, configDirectory, "second.yml"),
-	}
-	started := make(chan string, len(paths))
-	release := make(chan struct{})
-	client := &stubRunControlClient{
-		socketPath: "/private/slipway.sock",
-		run: func(_ context.Context, path, _ string, remove bool, onEvent func(control.RunEvent) error) (control.Instance, error) {
-			if !remove {
-				t.Error("daemon directory Run remove = false with --rm")
-			}
-			started <- path
-			<-release
-			instance := control.Instance{ID: filepath.Base(path), State: control.StateRunning}
-			if err := onEvent(control.RunEvent{Type: "started", Instance: instance}); err != nil {
-				return instance, err
-			}
-			if err := onEvent(control.RunEvent{Type: "log", Log: filepath.Base(path) + "\n"}); err != nil {
-				return instance, err
-			}
-			instance.State = control.StateExited
-			return instance, nil
-		},
-	}
-	var stdout bytes.Buffer
-	done := make(chan error, 1)
-	go func() {
-		done <- runSelectedConfigsPreferDaemon(
-			context.Background(), configDirectory, "", &stdout, io.Discard, true, client,
-			func(context.Context, []daemon.NamedConfig, *slog.Logger) error {
-				return errors.New("unexpected daemonless execution")
-			},
-		)
-	}()
-	seen := make(map[string]bool, len(paths))
-	for range paths {
-		select {
-		case path := <-started:
-			seen[path] = true
-		case <-time.After(3 * time.Second):
-			close(release)
-			t.Fatal("daemon config runs were not launched concurrently")
-		}
-	}
-	close(release)
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatal(err)
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("daemon directory run did not finish")
-	}
-	for _, path := range paths {
-		if !seen[path] || !strings.Contains(stdout.String(), filepath.Base(path)) {
-			t.Fatalf("started = %+v, stdout = %q; missing %s", seen, stdout.String(), path)
-		}
-	}
-}
-
-func TestRunSelectionPassesRemoveOnExitAndStopsDaemonInstanceOnCancellation(t *testing.T) {
-	configPath := writePlaceholderRunConfig(t, "worker.yaml")
-	ctx, cancel := context.WithCancel(context.Background())
-	started := make(chan struct{})
-	stopped := make(chan string, 1)
-	client := &stubRunControlClient{
-		socketPath: "/private/slipway.sock",
-		run: func(ctx context.Context, _ string, _ string, remove bool, onEvent func(control.RunEvent) error) (control.Instance, error) {
-			if !remove {
-				t.Fatal("daemon Run remove = false with --rm")
-			}
-			instance := control.Instance{ID: "000000000003", State: control.StateRunning}
-			if err := onEvent(control.RunEvent{Type: "started", Instance: instance}); err != nil {
-				return instance, err
-			}
-			close(started)
-			<-ctx.Done()
-			return instance, ctx.Err()
-		},
-		stop: func(_ context.Context, selector string) (control.Instance, error) {
-			stopped <- selector
-			return control.Instance{ID: selector, State: control.StateExited}, nil
-		},
-	}
-	done := make(chan error, 1)
-	go func() {
-		done <- runSelectedConfigsPreferDaemon(
-			ctx, configPath, "", io.Discard, io.Discard, true, client,
-			func(context.Context, []daemon.NamedConfig, *slog.Logger) error {
-				return errors.New("unexpected daemonless execution")
-			},
-		)
-	}()
-	select {
-	case <-started:
-		cancel()
-	case <-time.After(3 * time.Second):
-		cancel()
-		t.Fatal("daemon instance did not start")
-	}
-	select {
-	case selector := <-stopped:
-		if selector != "000000000003" {
-			t.Fatalf("stopped selector = %q", selector)
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("cancellation did not stop daemon instance")
-	}
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("canceled foreground run error = %v", err)
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("canceled foreground run did not return")
-	}
-}
-
-func TestRunSelectedConfigsAcceptsConfigDirectory(t *testing.T) {
+func TestTestSelectionAcceptsSingleConfigDirectory(t *testing.T) {
 	root := t.TempDir()
 	configDirectory := filepath.Join(root, "configs")
 	watchDirectory := filepath.Join(root, "incoming")
@@ -649,7 +222,7 @@ func TestRunSelectedConfigsAcceptsConfigDirectory(t *testing.T) {
 	if err := os.Mkdir(watchDirectory, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	names := []string{"first.yaml", "second.yml"}
+	names := []string{"first.yaml"}
 	for _, name := range names {
 		configuration := fmt.Sprintf(`
 database: {path: %q}
@@ -668,11 +241,12 @@ watches:
 	started := make(chan []daemon.NamedConfig, 1)
 	done := make(chan error, 1)
 	go func() {
-		done <- runSelectedConfigs(ctx, configDirectory, "", &bytes.Buffer{}, func(ctx context.Context, configs []daemon.NamedConfig, _ *slog.Logger) error {
-			started <- configs
-			<-ctx.Done()
-			return nil
-		})
+		done <- testSelectedConfig(ctx, configDirectory, io.Discard,
+			func(ctx context.Context, configs []daemon.NamedConfig, _ *slog.Logger) error {
+				started <- configs
+				<-ctx.Done()
+				return nil
+			})
 	}()
 
 	select {
@@ -706,8 +280,8 @@ func TestManagedCommandUsage(t *testing.T) {
 		args []string
 		want string
 	}{
-		{name: "run positional", args: []string{"run", "unexpected"}, want: "slipway: run does not accept positional arguments; use --config path\n"},
-		{name: "start positional", args: []string{"start", "unexpected"}, want: "slipway: start does not accept positional arguments; use --config path\n"},
+		{name: "test missing config", args: []string{"test"}, want: "slipway: config path is required\n"},
+		{name: "start positional", args: []string{"start", "one.yaml", "worker", "extra"}, want: "slipway: start expects at most 2 positional arguments (config path, optional instance name)\n"},
 		{name: "ps positional", args: []string{"ps", "unexpected"}, want: "slipway: ps does not accept positional arguments\n"},
 		{name: "stop selector", args: []string{"stop"}, want: "slipway: stop requires at least one instance ID or name\n"},
 	}
@@ -727,8 +301,8 @@ func TestManagedCommandHelp(t *testing.T) {
 		command string
 		usage   string
 	}{
-		{command: "run", usage: "Usage: slipway run [--rm] [--config path] [--name name] [--socket path]"},
-		{command: "start", usage: "Usage: slipway start [--config path] [--name name] [--socket path]"},
+		{command: "test", usage: "Usage: slipway test <config>"},
+		{command: "start", usage: "Usage: slipway start <config-or-instance> [name] [--socket path]"},
 		{command: "ps", usage: "Usage: slipway ps [--all] [--socket path]"},
 		{command: "stop", usage: "Usage: slipway stop [--socket path] <id-or-name> [id-or-name ...]"},
 	}
@@ -743,6 +317,36 @@ func TestManagedCommandHelp(t *testing.T) {
 	}
 }
 
+func TestDiscoverStartConfigAllowsMissingOrBlankName(t *testing.T) {
+	configPath := writePlaceholderRunConfig(t, "worker.yaml")
+	for _, name := range []string{"", " \t"} {
+		paths, gotName, err := discoverStartConfig(configPath, name)
+		if err != nil {
+			t.Fatalf("discoverStartConfig(%q, %q): %v", configPath, name, err)
+		}
+		if !reflect.DeepEqual(paths, []string{configPath}) || gotName != "" {
+			t.Errorf("discoverStartConfig(%q, %q) = %q, %q; want [%q], empty name", configPath, name, paths, gotName, configPath)
+		}
+	}
+}
+
+func TestInstanceCommandsRejectMultipleConfigs(t *testing.T) {
+	directory := t.TempDir()
+	writePlaceholderRunConfigAt(t, directory, "first.yaml")
+	writePlaceholderRunConfigAt(t, directory, "second.yaml")
+	for _, command := range []string{"test", "start"} {
+		args := []string{directory}
+		if command != "test" {
+			args = append(args, "worker")
+		}
+		var stdout, stderr bytes.Buffer
+		code := Run(append([]string{command}, args...), &stdout, &stderr)
+		if code != 2 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "single configuration file") {
+			t.Errorf("%s %v = %d, stdout %q, stderr %q; want single config usage error", command, args, code, stdout.String(), stderr.String())
+		}
+	}
+}
+
 func TestRunDaemonUsage(t *testing.T) {
 	t.Parallel()
 
@@ -750,7 +354,7 @@ func TestRunDaemonUsage(t *testing.T) {
 	if code := RunDaemon([]string{"--help"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("RunDaemon(--help) code = %d, stderr = %q", code, stderr.String())
 	}
-	if want := "slipwayd [--config path] [--socket path] [--web-listen address] [--log-level level]"; !strings.Contains(stdout.String(), want) {
+	if want := "slipwayd [--socket path] [--web-listen address] [--log-level level]"; !strings.Contains(stdout.String(), want) {
 		t.Fatalf("RunDaemon(--help) output = %q, want it to contain %q", stdout.String(), want)
 	}
 	if stderr.Len() != 0 {
@@ -759,10 +363,10 @@ func TestRunDaemonUsage(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	if code := RunDaemon([]string{"unexpected"}, &stdout, &stderr); code != 2 {
+	if code := RunDaemon([]string{writePlaceholderRunConfig(t, "worker.yaml")}, &stdout, &stderr); code != 2 {
 		t.Fatalf("RunDaemon(positional) code = %d, stderr = %q", code, stderr.String())
 	}
-	if got, want := stderr.String(), "slipwayd: does not accept positional arguments\n"; got != want {
+	if got, want := stderr.String(), "slipwayd: does not accept positional arguments; register instances with slipway start <config> [name]\n"; got != want {
 		t.Fatalf("RunDaemon(positional) stderr = %q, want %q", got, want)
 	}
 
@@ -814,40 +418,6 @@ func managedCLI(t *testing.T, args ...string) (code int, stdout, stderr string) 
 	var stdoutBuffer, stderrBuffer bytes.Buffer
 	code = Run(args, &stdoutBuffer, &stderrBuffer)
 	return code, stdoutBuffer.String(), stderrBuffer.String()
-}
-
-type stubRunControlClient struct {
-	socketPath string
-	listErr    error
-	run        func(context.Context, string, string, bool, func(control.RunEvent) error) (control.Instance, error)
-	stop       func(context.Context, string) (control.Instance, error)
-}
-
-func (client *stubRunControlClient) SocketPath() string {
-	return client.socketPath
-}
-
-func (client *stubRunControlClient) List(context.Context, bool) ([]control.Instance, error) {
-	return nil, client.listErr
-}
-
-func (client *stubRunControlClient) RunWithOptions(
-	ctx context.Context,
-	path, name string,
-	options control.RunOptions,
-	onEvent func(control.RunEvent) error,
-) (control.Instance, error) {
-	if client.run == nil {
-		return control.Instance{}, errors.New("unexpected daemon Run call")
-	}
-	return client.run(ctx, path, name, options.RemoveOnExit, onEvent)
-}
-
-func (client *stubRunControlClient) Stop(ctx context.Context, selector string) (control.Instance, error) {
-	if client.stop == nil {
-		return control.Instance{}, errors.New("unexpected daemon Stop call")
-	}
-	return client.stop(ctx, selector)
 }
 
 func writePlaceholderRunConfig(t *testing.T, name string) string {

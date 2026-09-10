@@ -513,7 +513,7 @@ function Dashboard({
             {queues === null ? (
               <DashboardSkeleton />
             ) : queues.length === 0 ? (
-              <EmptyState title="No queues registered" copy="Start an instance with slipwayd --config or the trusted slipway CLI. Its durable queue will appear here." />
+              <EmptyState title="No queues registered" copy="Register a config with slipway start. Its queue and instance will remain available after daemon restarts." />
             ) : (
               <section className="queue-workspace">
                 <QueueRail
@@ -762,7 +762,7 @@ function InstancesPanel({
   }
   return (
     <section className="instances-card">
-      <div className="section-label"><span>Current daemon lifetime</span><b>{instances.length}</b></div>
+      <div className="section-label"><span>Registered instances</span><b>{instances.length}</b></div>
       <div className="table-wrap">
         <table>
           <thead>
@@ -771,7 +771,7 @@ function InstancesPanel({
           <tbody>
             {instances.map((instance) => (
               <tr key={instance.id}>
-                <td><StatusPill status={instance.state} /></td>
+                <td><StatusPill status={instance.state} />{instance.desired_state && <small className="cell-subtitle">Desired: {instance.desired_state}</small>}</td>
                 <td>
                   <strong>{instance.name}</strong>
                   <small className="cell-subtitle">{instance.id}</small>
@@ -781,7 +781,7 @@ function InstancesPanel({
                 <td>{formatDate(instance.started_at)}</td>
                 <td>{duration(instance.started_at, instance.finished_at)}</td>
                 <td>
-                  {['running', 'stopping'].includes(instance.state) && (
+                  {(['running', 'stopping'].includes(instance.state) || instance.desired_state === 'running') && (
                     <button className="button button-danger button-small" disabled={Boolean(actionID) || instance.state === 'stopping'} onClick={() => onStop(instance.id)}>
                       {instance.state === 'stopping' ? 'Stopping' : actionID === instance.id ? 'Working…' : 'Stop'}
                     </button>
@@ -792,7 +792,7 @@ function InstancesPanel({
           </tbody>
         </table>
       </div>
-      <p className="retention-note">Instance history is bounded to this daemon lifetime. Queue history remains durable.</p>
+      <p className="retention-note">Instances resume after daemon restarts unless explicitly stopped. Queue and execution history remain durable.</p>
     </section>
   )
 }

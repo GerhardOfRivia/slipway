@@ -13,9 +13,10 @@ services:
 
     environment:
       SLIPWAY_SOCKET: /run/slipway/slipway.sock
+      SLIPWAY_STATE_DIR: "${SLIPWAY_WORKSPACE}/state"
       SLIPWAY_WEB_LISTEN: "0.0.0.0:5280"
-      # Uncomment after placing valid pipeline configs in this directory:
-      # SLIPWAY_CONFIG: "${SLIPWAY_WORKSPACE}/configs"
+
+    # Register instances with slipway start; daemon restarts restore the registry.
 
     working_dir: "${SLIPWAY_WORKSPACE:?Set SLIPWAY_WORKSPACE in .env}"
 

@@ -104,100 +104,16 @@ func TestDiscoverExplicitRejectsNonFile(t *testing.T) {
 	}
 }
 
-func TestDiscoverDefaultDirectoriesAreCombinedDeterministically(t *testing.T) {
+func TestDiscoverRequiresExplicitPath(t *testing.T) {
 	root := t.TempDir()
-	system := filepath.Join(root, "system")
-	user := filepath.Join(root, "user")
-	if err := os.MkdirAll(system, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(user, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	for _, name := range []string{"20-system.yml", "10-system.yaml"} {
-		writeDiscoveryFile(t, filepath.Join(system, name))
-	}
-	for _, name := range []string{"40-user.yaml", "30-user.yml"} {
-		writeDiscoveryFile(t, filepath.Join(user, name))
-	}
-	fallback := filepath.Join(root, "slipway.yaml")
-	writeDiscoveryFile(t, fallback)
-
-	paths, err := discoverWithLocations("", discoveryLocations{
-		directories: []string{system, user},
-		fallback:    fallback,
-	})
-	if err != nil {
-		t.Fatalf("discoverWithLocations() error = %v", err)
-	}
-	want := []string{
-		filepath.Join(system, "10-system.yaml"),
-		filepath.Join(system, "20-system.yml"),
-		filepath.Join(user, "30-user.yml"),
-		filepath.Join(user, "40-user.yaml"),
-	}
-	if !reflect.DeepEqual(paths, want) {
-		t.Fatalf("discoverWithLocations() = %q, want %q", paths, want)
-	}
-}
-
-func TestDiscoverDefaultsIgnoreMissingDirectoriesAndUseFallback(t *testing.T) {
-	root := t.TempDir()
-	fallback := filepath.Join(root, "slipway.yaml")
-	writeDiscoveryFile(t, fallback)
-
-	paths, err := discoverWithLocations("", discoveryLocations{
-		directories: []string{
-			filepath.Join(root, "missing-system"),
-			filepath.Join(root, "missing-user"),
-		},
-		fallback: fallback,
-	})
-	if err != nil {
-		t.Fatalf("discoverWithLocations() error = %v", err)
-	}
-	if want := []string{fallback}; !reflect.DeepEqual(paths, want) {
-		t.Fatalf("discoverWithLocations() = %q, want %q", paths, want)
-	}
-}
-
-func TestDiscoverDefaultsErrorListsEverySearchedLocation(t *testing.T) {
-	root := t.TempDir()
-	system := filepath.Join(root, "system")
-	user := filepath.Join(root, "user")
-	fallback := filepath.Join(root, "slipway.yaml")
-	if err := os.MkdirAll(system, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(user, 0o700); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err := discoverWithLocations("", discoveryLocations{
-		directories: []string{system, user},
-		fallback:    fallback,
-	})
-	if err == nil {
-		t.Fatal("discoverWithLocations() returned no error")
-	}
-	for _, location := range []string{system, user, fallback} {
-		if !strings.Contains(err.Error(), location) {
-			t.Errorf("error %q does not list %q", err, location)
+	t.Chdir(root)
+	writeDiscoveryFile(t, "slipway")
+	writeDiscoveryFile(t, "slipway.yaml")
+	for _, selection := range []string{"", " ", "\t\n"} {
+		_, err := Discover(selection)
+		if err == nil || err.Error() != "configuration path is required" {
+			t.Errorf("Discover(%q) error = %v, want required path error", selection, err)
 		}
-	}
-}
-
-func TestDiscoverDefaultLocationMustBeDirectory(t *testing.T) {
-	root := t.TempDir()
-	notDirectory := filepath.Join(root, "slipway.d")
-	writeDiscoveryFile(t, notDirectory)
-
-	_, err := discoverWithLocations("", discoveryLocations{
-		directories: []string{notDirectory},
-		fallback:    filepath.Join(root, "slipway.yaml"),
-	})
-	if err == nil || !strings.Contains(err.Error(), "not a directory") {
-		t.Fatalf("discoverWithLocations() error = %v", err)
 	}
 }
 

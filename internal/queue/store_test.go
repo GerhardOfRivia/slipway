@@ -486,17 +486,19 @@ func TestRecoverRunningRequeuesAndClosesInterruptedHistory(t *testing.T) {
 	if recoveredJob.LastError != "interrupted by daemon restart" {
 		t.Fatalf("recovery error = %q", recoveredJob.LastError)
 	}
-	run, err := store.GetRun(ctx, claimed.RunID)
-	if err != nil {
-		t.Fatalf("get interrupted run: %v", err)
+	runs, err := store.ListRuns(ctx, job.ID)
+	if err != nil || len(runs) != 1 || runs[0].ID != claimed.RunID {
+		t.Fatalf("interrupted runs = %+v, error = %v", runs, err)
 	}
+	run := runs[0]
 	if run.Status != StatusFailed || run.FinishedAt == nil {
 		t.Fatalf("interrupted run = %+v", run)
 	}
-	command, err := store.GetCommand(ctx, commandID)
-	if err != nil {
-		t.Fatalf("get interrupted command: %v", err)
+	commands, err := store.ListCommands(ctx, claimed.RunID)
+	if err != nil || len(commands) != 1 || commands[0].ID != commandID {
+		t.Fatalf("interrupted commands = %+v, error = %v", commands, err)
 	}
+	command := commands[0]
 	if command.Status != CommandFailed || command.ExitCode == nil || *command.ExitCode != -1 {
 		t.Fatalf("interrupted command = %+v", command)
 	}
@@ -635,10 +637,11 @@ func TestFailClosesRunningCommandHistory(t *testing.T) {
 	if _, err := store.Fail(ctx, job.ID, job.RunID, "persistence failed", 0); err != nil {
 		t.Fatal(err)
 	}
-	command, err := store.GetCommand(ctx, commandID)
-	if err != nil {
-		t.Fatal(err)
+	commands, err := store.ListCommands(ctx, job.RunID)
+	if err != nil || len(commands) != 1 || commands[0].ID != commandID {
+		t.Fatalf("failed commands = %+v, error = %v", commands, err)
 	}
+	command := commands[0]
 	if command.Status != CommandFailed || command.FinishedAt == nil || command.ExitCode == nil || *command.ExitCode != -1 {
 		t.Fatalf("running command after job failure = %+v", command)
 	}

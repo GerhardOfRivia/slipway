@@ -14,52 +14,23 @@ import (
 	"time"
 )
 
-func TestExpand(t *testing.T) {
+func TestExpanderString(t *testing.T) {
 	t.Parallel()
-
-	command := Command{
-		Args: []string{
-			"{{file}}",
-			"{{dir}}",
-			"{{basename}}",
-			"{{stem}}",
-			"{{ext}}",
-			"job={{job_id}}",
-		},
-		WorkingDir: "{{dir}}/work for {{stem}}",
-		Output:     "results/{{stem}}-{{job_id}}.json",
-		Env: map[string]string{
-			"INPUT": "{{file}}",
-			"LABEL": "{{basename}}:{{job_id}}",
-		},
-	}
 	file := filepath.Join(string(filepath.Separator), "tmp", "a directory", "report.final.csv")
-
-	got := Expand(command, TemplateData{File: file, JobID: 42})
-	wantArgs := []string{
-		file,
-		filepath.Dir(file),
-		"report.final.csv",
-		"report.final",
-		".csv",
-		"job=42",
-	}
-	if !reflect.DeepEqual(got.Args, wantArgs) {
-		t.Fatalf("args = %#v, want %#v", got.Args, wantArgs)
-	}
-	if want := filepath.Join(filepath.Dir(file), "work for report.final"); got.WorkingDir != want {
-		t.Fatalf("working directory = %q, want %q", got.WorkingDir, want)
-	}
-	if want := filepath.Join("results", "report.final-42.json"); got.Output != want {
-		t.Fatalf("output = %q, want %q", got.Output, want)
-	}
-	if got.Env["INPUT"] != file || got.Env["LABEL"] != "report.final.csv:42" {
-		t.Fatalf("environment was not expanded: %#v", got.Env)
-	}
-
-	// Expansion must not mutate the configured pipeline shared by other jobs.
-	if command.Args[0] != "{{file}}" || command.Output != "results/{{stem}}-{{job_id}}.json" || command.Env["INPUT"] != "{{file}}" {
-		t.Fatalf("Expand mutated its input: %#v", command)
+	expander := NewExpander(TemplateData{File: file, JobID: 42})
+	for _, test := range []struct{ input, want string }{
+		{"{{file}}", file},
+		{"{{dir}}", filepath.Dir(file)},
+		{"{{basename}}", "report.final.csv"},
+		{"{{stem}}", "report.final"},
+		{"{{ext}}", ".csv"},
+		{"job={{job_id}}", "job=42"},
+		{"{{basename}}:{{job_id}}", "report.final.csv:42"},
+		{"{{unknown}}", "{{unknown}}"},
+	} {
+		if got := expander.String(test.input); got != test.want {
+			t.Errorf("String(%q) = %q, want %q", test.input, got, test.want)
+		}
 	}
 }
 
@@ -137,12 +108,12 @@ func TestLocalPassesUnsafeLookingPathAsOneLiteralArgument(t *testing.T) {
 
 	marker := filepath.Join(t.TempDir(), "must-not-be-created")
 	file := "some folder/a file;$(touch " + marker + ")&.csv"
-	command := Expand(Command{
+	command := Command{
 		Name:    "echo arguments",
 		Program: os.Args[0],
-		Args:    []string{"-test.run=^TestExecutorHelperProcess$", "--", "{{file}}", "literal * ? | >"},
+		Args:    []string{"-test.run=^TestExecutorHelperProcess$", "--", file, "literal * ? | >"},
 		Env:     map[string]string{"SLIPWAY_EXECUTOR_HELPER": "echo"},
-	}, TemplateData{File: file, JobID: 1})
+	}
 
 	result, err := NewLocal(nil).Execute(context.Background(), command)
 	if err != nil {

@@ -108,9 +108,12 @@ type Manager struct {
 	activeConfigs   map[string]string
 	activeDatabases map[string]string
 	shuttingDown    bool
+	registry        *registry
+	persistenceErr  error
 }
 
-// NewManager constructs an empty supervisor.
+// NewManager constructs a supervisor and loads any durable registrations.
+// Call Restore after acquiring listeners to resume saved instances.
 func NewManager(options Options) (*Manager, error) {
 	if options.LogCapacity < 0 {
 		return nil, errors.New("control: log capacity cannot be negative")
@@ -135,6 +138,9 @@ func NewManager(options Options) (*Manager, error) {
 	loader := options.Loader
 	if loader == nil {
 		loader = config.Load
+		if options.StateDirectory != "" {
+			loader = config.LoadManaged
+		}
 	}
 	runner := options.Runner
 	if runner == nil {
@@ -152,7 +158,7 @@ func NewManager(options Options) (*Manager, error) {
 	if retainedInstances == 0 {
 		retainedInstances = defaultRetainedInstances
 	}
-	return &Manager{
+	manager := &Manager{
 		ctx:                 managerContext,
 		cancel:              cancel,
 		loader:              loader,
@@ -171,7 +177,21 @@ func NewManager(options Options) (*Manager, error) {
 		knownQueues:         make(map[string]KnownQueue),
 		activeConfigs:       make(map[string]string),
 		activeDatabases:     make(map[string]string),
-	}, nil
+	}
+	if options.StateDirectory != "" {
+		registry, err := openRegistry(options.StateDirectory)
+		if err != nil {
+			cancel()
+			return nil, err
+		}
+		manager.registry = registry
+		if err := manager.loadRegistered(); err != nil {
+			_ = registry.close()
+			cancel()
+			return nil, err
+		}
+	}
+	return manager, nil
 }
 
 type startCandidate struct {
@@ -210,6 +230,9 @@ func (manager *Manager) StartManyContext(startContext context.Context, configPat
 // dashboard queue from silently starting a configuration that was edited to
 // use another database.
 func (manager *Manager) StartKnownQueueContext(startContext context.Context, known KnownQueue) ([]Instance, error) {
+	if manager != nil && manager.registry != nil {
+		return manager.startRegisteredQueue(startContext, known)
+	}
 	if strings.TrimSpace(known.ConfigPath) == "" || strings.TrimSpace(known.ConfigIdentity) == "" || strings.TrimSpace(known.Identity) == "" {
 		return nil, errors.New("control: known queue config path and identity are required")
 	}
@@ -243,6 +266,13 @@ func (manager *Manager) startManyContext(startContext context.Context, configPat
 	}
 	if startContext == nil {
 		return startResult{}, errors.New("control: start context is required")
+	}
+	if manager.registry != nil {
+		if attach {
+			return startResult{}, errors.New("control: attached daemon runs are no longer supported; use slipway test for foreground execution or slipway start for a persistent instance")
+		}
+		instances, err := manager.startRegistered(startContext, configPaths, name)
+		return startResult{instances: instances}, err
 	}
 	if err := startContext.Err(); err != nil {
 		return startResult{}, err
@@ -510,10 +540,7 @@ func (manager *Manager) startManyContext(startContext context.Context, configPat
 	return result, nil
 }
 
-// KnownQueues returns every durable queue successfully loaded during this
-// daemon lifetime. The catalog is independent of bounded instance retention so
-// stopped queues stay available to local management surfaces such as the web
-// dashboard.
+// KnownQueues returns the queue catalog, including stopped registrations.
 func (manager *Manager) KnownQueues() []KnownQueue {
 	if manager == nil {
 		return nil
@@ -798,6 +825,21 @@ func (manager *Manager) List(all bool) []Instance {
 	return instances
 }
 
+// Get returns one retained instance selected by exact name or an unambiguous
+// ID prefix. Active and terminal instances use the same selector semantics.
+func (manager *Manager) Get(selector string) (Instance, error) {
+	if manager == nil {
+		return Instance{}, errors.New("control: manager is required")
+	}
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	runtime, err := manager.resolveLocked(selector)
+	if err != nil {
+		return Instance{}, err
+	}
+	return cloneInstance(runtime.view), nil
+}
+
 // Stop cancels one active instance selected by exact name or an unambiguous ID
 // prefix, then waits for its runner and log stream to finish.
 func (manager *Manager) Stop(ctx context.Context, selector string) (Instance, error) {
@@ -815,6 +857,23 @@ func (manager *Manager) Stop(ctx context.Context, selector string) (Instance, er
 	if err != nil {
 		manager.mu.Unlock()
 		return Instance{}, err
+	}
+	if manager.registry != nil {
+		if manager.shuttingDown || manager.ctx.Err() != nil {
+			manager.mu.Unlock()
+			return Instance{}, ErrShuttingDown
+		}
+		view := cloneInstance(runtime.view)
+		view.DesiredState = "stopped"
+		if err := manager.registry.saveViews(ctx, []Instance{view}); err != nil {
+			manager.mu.Unlock()
+			return Instance{}, err
+		}
+		runtime.view = view
+		if !view.Active() {
+			manager.mu.Unlock()
+			return view, nil
+		}
 	}
 	if !runtime.view.Active() {
 		view := cloneInstance(runtime.view)
@@ -901,6 +960,11 @@ func (manager *Manager) Shutdown(ctx context.Context) error {
 			return ctx.Err()
 		}
 	}
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	if manager.registry != nil {
+		return errors.Join(manager.persistenceErr, manager.registry.close())
+	}
 	return nil
 }
 
@@ -935,7 +999,14 @@ func (manager *Manager) run(runtime *runtimeInstance) {
 	_ = runtime.logs.Close()
 
 	manager.mu.Lock()
+	view.DesiredState = runtime.view.DesiredState
 	runtime.view = view
+	if manager.registry != nil {
+		if err := manager.registry.saveViews(context.Background(), []Instance{view}); err != nil {
+			manager.persistenceErr = errors.Join(manager.persistenceErr, err)
+			runtime.logger.Error("persist instance state", "error", err)
+		}
+	}
 	if manager.activeConfigs[runtime.configIdentity] == runtime.view.ID {
 		delete(manager.activeConfigs, runtime.configIdentity)
 	}
@@ -1078,6 +1149,9 @@ func (manager *Manager) now() time.Time {
 }
 
 func (manager *Manager) trimTerminatedLocked(currentID string) {
+	if manager.registry != nil {
+		return // Registered instances, including stopped ones, are durable.
+	}
 	terminalIDs := make([]string, 0, len(manager.instances))
 	terminalCount := 0
 	for id, runtime := range manager.instances {

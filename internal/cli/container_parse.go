@@ -18,108 +18,11 @@ type structuredContainerRun struct {
 	commandArgs   []string
 }
 
-type runOptionArity uint8
-
-const (
-	runOptionBoolean runOptionArity = iota
-	runOptionValue
-)
-
-type runOptionGrammar struct {
-	long  map[string]runOptionArity
-	short map[byte]runOptionArity
-}
-
-type parsedRunOption struct {
-	name      string
-	value     string
-	consumed  int
-	known     bool
-	clustered bool
-}
-
 type scannedRunOption struct {
 	raw      []string
 	mount    generatedMount
 	hasEnv   bool
 	hasMount bool
-}
-
-var dockerRunGrammar = newRunOptionGrammar(
-	// Value-taking options from Docker's run reference. Deprecated aliases are
-	// included because the CLI still accepts them even when help omits them.
-	`add-host annotation attach blkio-weight blkio-weight-device cap-add cap-drop
-	 cgroup-parent cgroupns cidfile cpu-count cpu-percent cpu-period cpu-quota
-	 cpu-rt-period cpu-rt-runtime cpu-shares cpus cpuset-cpus cpuset-mems
-	 detach-keys device device-cgroup-rule device-read-bps device-read-iops
-	 device-write-bps device-write-iops dns dns-opt dns-option dns-search
-	 domainname entrypoint env env-file expose gpus group-add health-cmd
-	 health-interval health-retries health-start-interval health-start-period
-	 health-timeout hostname io-maxbandwidth io-maxiops ip ip6 ipc isolation
-	 kernel-memory label label-file link link-local-ip log-driver log-opt
-	 mac-address memory memory-reservation memory-swap memory-swappiness mount
-	 name net net-alias network network-alias oom-score-adj pid pids-limit
-	 platform publish pull restart runtime security-opt shm-size stop-signal
-	 stop-timeout storage-opt sysctl tmpfs ulimit user userns uts volume
-	 volume-driver volumes-from workdir`,
-	`detach disable-content-trust help init interactive no-healthcheck
-	 oom-kill-disable privileged publish-all quiet read-only rm sig-proxy tty
-	 use-api-socket`,
-	"acehlmpuvw",
-	"diPqt",
-)
-
-var podmanRunGrammar = extendRunOptionGrammar(
-	dockerRunGrammar,
-	`arch authfile cert-dir cgroup-conf cgroups chrootdirs conmon-pidfile creds
-	 decryption-key env-merge gidmap group-entry health-log-destination
-	 health-max-log-count health-max-log-size health-on-failure health-startup-cmd
-	 health-startup-interval health-startup-retries health-startup-success
-	 health-startup-timeout hosts-file hostuser image-volume init-path os
-	 passwd-entry personality pidfile pod pod-id-file preserve-fd
-	 preserve-fds rdt-class requires retry retry-delay sdnotify seccomp-policy
-	 secret shm-size-systemd signature-policy subgidname subuidname systemd
-	 timeout tz uidmap umask unsetenv variant`,
-	`env-host http-proxy no-hostname no-hosts read-only-tmpfs replace rmi rootfs
-	 passwd tls-verify unsetenv-all`,
-)
-
-func newRunOptionGrammar(valueLong, booleanLong, valueShort, booleanShort string) runOptionGrammar {
-	grammar := runOptionGrammar{
-		long:  make(map[string]runOptionArity),
-		short: make(map[byte]runOptionArity),
-	}
-	addLongRunOptions(grammar.long, strings.Fields(valueLong), runOptionValue)
-	addLongRunOptions(grammar.long, strings.Fields(booleanLong), runOptionBoolean)
-	for index := range valueShort {
-		grammar.short[valueShort[index]] = runOptionValue
-	}
-	for index := range booleanShort {
-		grammar.short[booleanShort[index]] = runOptionBoolean
-	}
-	return grammar
-}
-
-func extendRunOptionGrammar(base runOptionGrammar, valueLong, booleanLong string) runOptionGrammar {
-	grammar := runOptionGrammar{
-		long:  make(map[string]runOptionArity, len(base.long)),
-		short: make(map[byte]runOptionArity, len(base.short)),
-	}
-	for name, arity := range base.long {
-		grammar.long[name] = arity
-	}
-	for name, arity := range base.short {
-		grammar.short[name] = arity
-	}
-	addLongRunOptions(grammar.long, strings.Fields(valueLong), runOptionValue)
-	addLongRunOptions(grammar.long, strings.Fields(booleanLong), runOptionBoolean)
-	return grammar
-}
-
-func addLongRunOptions(options map[string]runOptionArity, names []string, arity runOptionArity) {
-	for _, name := range names {
-		options[name] = arity
-	}
 }
 
 func parseStructuredContainerRun(executor config.ExecutorType, args []string) (*structuredContainerRun, string) {
@@ -136,10 +39,6 @@ func parseStructuredContainerRun(executor config.ExecutorType, args []string) (*
 		return nil, ""
 	}
 
-	grammar := dockerRunGrammar
-	if executor == config.ExecutorPodman {
-		grammar = podmanRunGrammar
-	}
 	environmentSafe := true
 	mountsSafe := true
 	environment := make(map[string]string)
@@ -163,13 +62,13 @@ func parseStructuredContainerRun(executor config.ExecutorType, args []string) (*
 			break
 		}
 
-		option, reason := parseContainerRunOption(grammar, args[index:])
+		option, reason := config.ParseContainerRunOption(executor, args[index:])
 		if reason != "" {
 			return nil, fmt.Sprintf("cannot safely parse %s run option %q: %s", executor, argument, reason)
 		}
-		raw := append([]string(nil), args[index:index+option.consumed]...)
+		raw := append([]string(nil), args[index:index+option.Consumed]...)
 		scanned := scannedRunOption{raw: raw}
-		if !option.known {
+		if !option.Known {
 			// An attached value makes the image boundary knowable, but an
 			// unknown option could still interact with extracted fields. Keep
 			// every mount and environment option in its original position.
@@ -177,13 +76,13 @@ func parseStructuredContainerRun(executor config.ExecutorType, args []string) (*
 			mountsSafe = false
 		}
 
-		switch option.name {
+		switch option.Name {
 		case "env":
-			if option.clustered {
+			if option.Clustered {
 				environmentSafe = false
 				break
 			}
-			key, value, ok := strings.Cut(option.value, "=")
+			key, value, ok := strings.Cut(option.Value, "=")
 			_, duplicate := seenEnvironment[key]
 			if !ok || key == "" || strings.ContainsRune(key, '=') || strings.IndexByte(key, 0) >= 0 || duplicate {
 				environmentSafe = false
@@ -193,7 +92,7 @@ func parseStructuredContainerRun(executor config.ExecutorType, args []string) (*
 				scanned.hasEnv = true
 			}
 		case "mount":
-			mount, ok := parseLongBindMount(option.value)
+			mount, ok := parseLongBindMount(option.Value)
 			if !ok {
 				mountsSafe = false
 			} else {
@@ -201,11 +100,11 @@ func parseStructuredContainerRun(executor config.ExecutorType, args []string) (*
 				scanned.hasMount = true
 			}
 		case "volume":
-			if option.clustered {
+			if option.Clustered {
 				mountsSafe = false
 				break
 			}
-			mount, ok := parseVolumeBindMount(option.value)
+			mount, ok := parseVolumeBindMount(option.Value)
 			if !ok {
 				mountsSafe = false
 			} else {
@@ -214,7 +113,7 @@ func parseStructuredContainerRun(executor config.ExecutorType, args []string) (*
 			}
 		}
 
-		switch option.name {
+		switch option.Name {
 		case "env-file", "env-host", "env-merge", "http-proxy", "unsetenv", "unsetenv-all":
 			environmentSafe = false
 		case "tmpfs", "volumes-from":
@@ -224,7 +123,7 @@ func parseStructuredContainerRun(executor config.ExecutorType, args []string) (*
 			mountsSafe = false
 		}
 		options = append(options, scanned)
-		index += option.consumed
+		index += option.Consumed
 	}
 
 	if index >= len(args) || strings.TrimSpace(args[index]) == "" {
@@ -261,76 +160,6 @@ func parseStructuredContainerRun(executor config.ExecutorType, args []string) (*
 		result.commandArgs = append([]string(nil), args[index+2:]...)
 	}
 	return result, ""
-}
-
-func parseContainerRunOption(grammar runOptionGrammar, args []string) (parsedRunOption, string) {
-	argument := args[0]
-	if strings.HasPrefix(argument, "--") {
-		nameValue := strings.TrimPrefix(argument, "--")
-		if nameValue == "" {
-			return parsedRunOption{}, "option name is blank"
-		}
-		if name, value, hasValue := strings.Cut(nameValue, "="); hasValue {
-			if name == "" {
-				return parsedRunOption{}, "option name is blank"
-			}
-			_, known := grammar.long[name]
-			return parsedRunOption{name: name, value: value, consumed: 1, known: known}, ""
-		}
-
-		arity, known := grammar.long[nameValue]
-		if !known {
-			return parsedRunOption{}, "unknown option arity"
-		}
-		if arity == runOptionBoolean {
-			return parsedRunOption{name: nameValue, consumed: 1, known: true}, ""
-		}
-		if len(args) < 2 {
-			return parsedRunOption{}, "value is missing"
-		}
-		return parsedRunOption{name: nameValue, value: args[1], consumed: 2, known: true}, ""
-	}
-
-	shorthands := strings.TrimPrefix(argument, "-")
-	if shorthands == "" {
-		return parsedRunOption{}, "option name is blank"
-	}
-	for index := 0; index < len(shorthands); index++ {
-		shortName := shorthands[index]
-		arity, known := grammar.short[shortName]
-		if !known {
-			return parsedRunOption{}, fmt.Sprintf("unknown shorthand -%c", shortName)
-		}
-		if arity == runOptionBoolean {
-			if index+1 < len(shorthands) && shorthands[index+1] == '=' {
-				return parsedRunOption{consumed: 1, known: true}, ""
-			}
-			continue
-		}
-
-		value := shorthands[index+1:]
-		hasAttachedValue := value != ""
-		consumed := 1
-		if strings.HasPrefix(value, "=") {
-			value = strings.TrimPrefix(value, "=")
-		}
-		if !hasAttachedValue {
-			if len(args) < 2 {
-				return parsedRunOption{}, fmt.Sprintf("value for -%c is missing", shortName)
-			}
-			value = args[1]
-			consumed = 2
-		}
-		name := ""
-		switch shortName {
-		case 'e':
-			name = "env"
-		case 'v':
-			name = "volume"
-		}
-		return parsedRunOption{name: name, value: value, consumed: consumed, known: true, clustered: name != "" && index != 0}, ""
-	}
-	return parsedRunOption{consumed: 1, known: true}, ""
 }
 
 func parseLongBindMount(specification string) (generatedMount, bool) {

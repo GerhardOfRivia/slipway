@@ -74,15 +74,15 @@ watches:
 		args []string
 		want []string
 	}{
-		{"status", []string{"status", "--config", configPath}, []string{"TOTAL", "1", "FAILED"}},
-		{"jobs", []string{"jobs", "--config", configPath, "--status", "failed"}, []string{"FAILED", "incoming", job.Path}},
-		{"job", []string{"job", "--config", configPath, fmt.Sprint(job.ID)}, []string{"Job 1", "Run 1", "Command 1", "exit 7"}},
-		{"logs", []string{"logs", "--config", configPath, fmt.Sprint(job.ID)}, []string{"Run 1 / Command 1", "some output", "some error"}},
+		{"status", []string{"status", configPath}, []string{"TOTAL", "1", "FAILED"}},
+		{"jobs", []string{"jobs", configPath, "--status", "failed"}, []string{"FAILED", "incoming", job.Path}},
+		{"job", []string{"job", configPath, fmt.Sprint(job.ID)}, []string{"Job 1", "Run 1", "Command 1", "exit 7"}},
+		{"logs", []string{"logs", configPath, fmt.Sprint(job.ID)}, []string{"Run 1 / Command 1", "some output", "some error"}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
-			if code := Run(test.args, &stdout, &stderr); code != 0 {
+			if code := Run(append(test.args, "--local"), &stdout, &stderr); code != 0 {
 				t.Fatalf("Run() code = %d, stderr = %s", code, stderr.String())
 			}
 			for _, want := range test.want {
@@ -129,7 +129,7 @@ func TestOpenStoresRejectsHardLinkedDatabaseAliases(t *testing.T) {
 func TestRunUsageErrors(t *testing.T) {
 	t.Parallel()
 	var stdout, stderr bytes.Buffer
-	if code := Run([]string{"jobs", "--status", "mystery"}, &stdout, &stderr); code != 2 {
+	if code := Run([]string{"jobs", "--status", "mystery", "pipeline.yaml"}, &stdout, &stderr); code != 2 {
 		t.Fatalf("invalid status exit code = %d, want 2", code)
 	}
 	if !strings.Contains(stderr.String(), "unknown job status") {
@@ -138,7 +138,7 @@ func TestRunUsageErrors(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	if code := Run([]string{"--help"}, &stdout, &stderr); code != 0 || !strings.Contains(stdout.String(), "slipway run") {
+	if code := Run([]string{"--help"}, &stdout, &stderr); code != 0 || !strings.Contains(stdout.String(), "slipway test") {
 		t.Fatalf("help code/output = %d %q", code, stdout.String())
 	}
 	if strings.Contains(stdout.String(), "slipway daemon") {
@@ -152,6 +152,33 @@ func TestRunUsageErrors(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), `slipway: unknown command "daemon"`) {
 		t.Fatalf("removed daemon command stderr = %q", stderr.String())
+	}
+}
+
+func TestConfigCommandsRequireExplicitConfig(t *testing.T) {
+	directory := t.TempDir()
+	t.Chdir(directory)
+	for _, name := range []string{"slipway", "slipway.yaml", "environment.yaml"} {
+		if err := os.WriteFile(name, []byte("watches: []\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("SLIPWAY_CONFIG", filepath.Join(directory, "environment.yaml"))
+	for _, command := range []string{"check", "test", "start", "status", "queue", "jobs", "job", "logs"} {
+		for _, configArgs := range [][]string{nil, {""}, {" \t"}} {
+			args := append([]string{command}, configArgs...)
+			if len(configArgs) > 0 && command == "start" {
+				args = append(args, "worker")
+			}
+			if len(configArgs) > 0 && (command == "job" || command == "logs") {
+				args = append(args, "1")
+			}
+			var stdout, stderr bytes.Buffer
+			code := Run(args, &stdout, &stderr)
+			if code != 2 || stdout.Len() != 0 || stderr.String() != "slipway: config path is required\n" {
+				t.Errorf("Run(%v) = %d, stdout %q, stderr %q; want required config usage error", args, code, stdout.String(), stderr.String())
+			}
+		}
 	}
 }
 
@@ -217,11 +244,11 @@ watches:
 	}
 
 	for _, invocation := range [][]string{
-		{"status", "--config", configDirectory},
-		{"jobs", "--config", configDirectory},
+		{"status", configDirectory},
+		{"jobs", configDirectory},
 	} {
 		var stdout, stderr bytes.Buffer
-		if code := Run(invocation, &stdout, &stderr); code != 0 {
+		if code := Run(append(invocation, "--local"), &stdout, &stderr); code != 0 {
 			t.Fatalf("Run(%v) code = %d, stderr = %s", invocation, code, stderr.String())
 		}
 		for _, configPath := range configPaths {
@@ -232,16 +259,16 @@ watches:
 	}
 
 	var stdout, stderr bytes.Buffer
-	if code := Run([]string{"job", "--config", configDirectory, "1"}, &stdout, &stderr); code != 1 {
+	if code := Run([]string{"job", "--local", configDirectory, "1"}, &stdout, &stderr); code != 1 {
 		t.Fatalf("ambiguous job exit code = %d, stderr = %q", code, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "select its config with --config") {
+	if !strings.Contains(stderr.String(), "pass its config path explicitly") {
 		t.Fatalf("ambiguous job stderr = %q", stderr.String())
 	}
 
 	stdout.Reset()
 	stderr.Reset()
-	if code := Run([]string{"job", "--config", configPaths[0], "1"}, &stdout, &stderr); code != 0 {
+	if code := Run([]string{"job", "--local", configPaths[0], "1"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("explicit job exit code = %d, stderr = %q", code, stderr.String())
 	}
 }

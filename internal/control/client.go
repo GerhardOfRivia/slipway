@@ -142,6 +142,17 @@ func (client *Client) List(ctx context.Context, all bool) ([]Instance, error) {
 	return response.Instances, nil
 }
 
+// Get returns one retained instance selected by exact name or an unambiguous
+// ID prefix.
+func (client *Client) Get(ctx context.Context, selector string) (Instance, error) {
+	var response instanceResponse
+	path := "/v1/instances/" + url.PathEscape(selector)
+	if err := client.doJSON(ctx, http.MethodGet, path, nil, &response); err != nil {
+		return Instance{}, err
+	}
+	return response.Instance, nil
+}
+
 // Stop requests an explicit instance stop and waits for the manager's result.
 func (client *Client) Stop(ctx context.Context, selector string) (Instance, error) {
 	var response instanceResponse

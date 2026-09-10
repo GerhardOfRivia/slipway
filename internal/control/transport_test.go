@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -85,6 +86,51 @@ func TestUnixHTTPStartListStop(t *testing.T) {
 	}
 	if got := manager.List(true); len(got) != 1 || got[0].ID != stopped.ID {
 		t.Fatalf("manager state after transport operations = %+v", got)
+	}
+}
+
+func TestUnixHTTPGetResolvesSelectorsAndReportsErrors(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	alphaPath := filepath.Join(root, "alpha.yaml")
+	betaPath := filepath.Join(root, "beta.yaml")
+	_, client, _ := newUnixTransportHarness(t, Options{
+		Loader: mappedLoader(t, map[string]*config.Config{
+			alphaPath: testConfig(filepath.Join(root, "alpha.db")),
+			betaPath:  testConfig(filepath.Join(root, "beta.db")),
+		}),
+		Runner: func(ctx context.Context, _ *config.Config, _ *slog.Logger) error {
+			<-ctx.Done()
+			return ctx.Err()
+		},
+		IDGenerator: sequenceIDGenerator("abc111000001", "abc222000002"),
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	instances, err := client.Start(ctx, []string{alphaPath, betaPath}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	byName, err := client.Get(ctx, "alpha")
+	if err != nil || byName.ID != instances[0].ID {
+		t.Fatalf("Get exact name = %+v, %v", byName, err)
+	}
+	byPrefix, err := client.Get(ctx, "abc222")
+	if err != nil || byPrefix.ID != instances[1].ID {
+		t.Fatalf("Get ID prefix = %+v, %v", byPrefix, err)
+	}
+
+	_, err = client.Get(ctx, "abc")
+	var apiError *APIError
+	if !errors.As(err, &apiError) || apiError.StatusCode != http.StatusConflict || apiError.Code != "ambiguous_selector" {
+		t.Fatalf("Get ambiguous prefix error = %#v, want ambiguous_selector conflict", err)
+	}
+	_, err = client.Get(ctx, "missing")
+	apiError = nil
+	if !errors.As(err, &apiError) || apiError.StatusCode != http.StatusNotFound || apiError.Code != "not_found" {
+		t.Fatalf("Get missing selector error = %#v, want not_found", err)
 	}
 }
 

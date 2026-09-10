@@ -50,11 +50,12 @@ type Instance struct {
 	Name       string `json:"name"`
 	ConfigPath string `json:"config_path"`
 	// ConfigHash identifies the effective configuration snapshot used by this
-	// run. Unlike ID, it remains stable across runs when the configuration is
-	// unchanged.
-	ConfigHash   string     `json:"config_hash"`
-	DatabasePath string     `json:"database_path"`
-	State        State      `json:"state"`
+	// run. It remains stable across restarts when the configuration is unchanged.
+	ConfigHash   string `json:"config_hash"`
+	DatabasePath string `json:"database_path"`
+	State        State  `json:"state"`
+	// DesiredState survives daemon shutdown: only an explicit stop clears it.
+	DesiredState string     `json:"desired_state,omitempty"`
 	CreatedAt    time.Time  `json:"created_at"`
 	StartedAt    time.Time  `json:"started_at"`
 	FinishedAt   *time.Time `json:"finished_at,omitempty"`
@@ -68,9 +69,8 @@ type RunOptions struct {
 	RemoveOnExit bool
 }
 
-// KnownQueue describes one durable queue successfully loaded during the
-// daemon's lifetime. Unlike the bounded instance history, this catalog is kept
-// until the daemon exits so queues remain discoverable after instances stop.
+// KnownQueue describes a queue in the supervisor's catalog. Durable managers
+// rebuild this catalog from registrations on startup, including stopped ones.
 type KnownQueue struct {
 	// Identity is the canonical database path used for stable internal
 	// references. ConfigPath retains the lexical path used to load the config.
@@ -89,8 +89,8 @@ func (instance Instance) Active() bool {
 	return instance.State == StateRunning || instance.State == StateStopping
 }
 
-// Loader loads and validates one configuration file. The production default
-// is config.Load.
+// Loader loads and validates one configuration file. Durable managers default
+// to config.LoadManaged; ephemeral supervisors default to config.Load.
 type Loader func(string) (*config.Config, error)
 
 // Runner runs one loaded configuration until its context is canceled or it
@@ -105,6 +105,9 @@ type Clock func() time.Time
 
 // Options configures a Manager. Zero values select production defaults.
 type Options struct {
+	// StateDirectory enables durable registration and daemon-owned queues.
+	// Empty leaves an ephemeral supervisor for embedded callers.
+	StateDirectory      string
 	Context             context.Context
 	Loader              Loader
 	Runner              Runner

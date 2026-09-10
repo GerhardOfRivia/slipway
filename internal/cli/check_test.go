@@ -9,6 +9,46 @@ import (
 	"testing"
 )
 
+func TestCheckWarnsAboutDockerTerminalFlags(t *testing.T) {
+	t.Parallel()
+	for _, pipeline := range []string{
+		`executor: docker, image: image, container_args: ["{{tty_flags}}"]`,
+		`executor: docker, args: [run, --it, image]`,
+		`program: /usr/bin/docker, args: [exec, -it, container, sh]`,
+	} {
+		directory := t.TempDir()
+		path := filepath.Join(directory, "pipeline.yaml")
+		contents := fmt.Sprintf(`
+values: {tty_flags: -it}
+database: {path: ./never-created.db}
+watches:
+  - name: incoming
+    path: .
+    pipeline: [{name: process, %s}]
+`, pipeline)
+		if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		for _, flagArgs := range [][]string{nil, {"--raw"}} {
+			var stdout, stderr bytes.Buffer
+			if code := Run(append([]string{"check", path}, flagArgs...), &stdout, &stderr); code != 0 {
+				t.Fatalf("check code=%d, stderr=%q", code, stderr.String())
+			}
+			for _, want := range []string{"warning:", path, `watch "incoming"`, `step 1 ("process")`, "TTY", "Remove"} {
+				if !strings.Contains(stderr.String(), want) {
+					t.Errorf("warning %q does not contain %q", stderr.String(), want)
+				}
+			}
+			if strings.Count(stderr.String(), "warning:") != 1 || !strings.Contains(stdout.String(), "process") {
+				t.Errorf("expected one warning and the pipeline display: stdout=%q, stderr=%q", stdout.String(), stderr.String())
+			}
+		}
+		if _, err := os.Stat(filepath.Join(directory, "never-created.db")); !os.IsNotExist(err) {
+			t.Errorf("check created a database: %v", err)
+		}
+	}
+}
+
 func TestQuoteShellWord(t *testing.T) {
 	t.Parallel()
 
@@ -84,7 +124,7 @@ watches:
 	}
 
 	var stdout, stderr bytes.Buffer
-	if code := Run([]string{"check", "--config", configPath}, &stdout, &stderr); code != 0 {
+	if code := Run([]string{"check", configPath}, &stdout, &stderr); code != 0 {
 		t.Fatalf("Run(check) code = %d, stderr = %q", code, stderr.String())
 	}
 	if stderr.Len() != 0 {
@@ -104,7 +144,7 @@ Watch: images
 
 	stdout.Reset()
 	stderr.Reset()
-	if code := Run([]string{"check", "--raw", "--config", configPath}, &stdout, &stderr); code != 0 {
+	if code := Run([]string{"check", "--raw", configPath}, &stdout, &stderr); code != 0 {
 		t.Fatalf("Run(check --raw) code = %d, stderr = %q", code, stderr.String())
 	}
 	rawWant := fmt.Sprintf(`Config: %s
@@ -165,7 +205,7 @@ watches:
 	}
 
 	var stdout, stderr bytes.Buffer
-	if code := Run([]string{"check", "--config", configPath}, &stdout, &stderr); code != 0 {
+	if code := Run([]string{"check", configPath}, &stdout, &stderr); code != 0 {
 		t.Fatalf("Run(check) code = %d, stderr = %q", code, stderr.String())
 	}
 	want := fmt.Sprintf(`Config: %s
@@ -182,7 +222,7 @@ Watch: mixed
 
 	stdout.Reset()
 	stderr.Reset()
-	if code := Run([]string{"check", "--config", configPath, "--raw"}, &stdout, &stderr); code != 0 {
+	if code := Run([]string{"check", configPath, "--raw"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("Run(check --raw) code = %d, stderr = %q", code, stderr.String())
 	}
 	rawWant := fmt.Sprintf(`Config: %s
@@ -220,7 +260,7 @@ watches:
 	}
 
 	var stdout, stderr bytes.Buffer
-	if code := Run([]string{"check", "--config", configPath}, &stdout, &stderr); code != 0 {
+	if code := Run([]string{"check", configPath}, &stdout, &stderr); code != 0 {
 		t.Fatalf("Run(check) code = %d, stderr = %q", code, stderr.String())
 	}
 	want := fmt.Sprintf(`Config: %s
@@ -233,7 +273,7 @@ Watch: incoming
 
 	stdout.Reset()
 	stderr.Reset()
-	if code := Run([]string{"check", "--raw", "--config", configPath}, &stdout, &stderr); code != 0 {
+	if code := Run([]string{"check", "--raw", configPath}, &stdout, &stderr); code != 0 {
 		t.Fatalf("Run(check --raw) code = %d, stderr = %q", code, stderr.String())
 	}
 	rawWant := fmt.Sprintf(`Config: %s
@@ -242,6 +282,45 @@ Watch: incoming
 `, configPath)
 	if got := stdout.String(); got != rawWant {
 		t.Fatalf("Run(check --raw) output = %q, want %q", got, rawWant)
+	}
+}
+
+func TestCheckUsesExplicitConfig(t *testing.T) {
+	directory := t.TempDir()
+	t.Chdir(directory)
+	t.Setenv("SLIPWAY_CONFIG", "environment.yaml")
+	for _, name := range []string{"slipway", "slipway.yaml", "environment.yaml"} {
+		if err := os.WriteFile(name, []byte("invalid: implicit config must not load\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	contents := "watches: [{name: incoming, path: ., pipeline: [{name: inspect, program: inspect}]}]\n"
+	if err := os.WriteFile("explicit.yaml", []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"check", "explicit.yaml"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("Run(check) code = %d, stderr = %q", code, stderr.String())
+	}
+	want := fmt.Sprintf("Config: %s\nWatch: incoming\n  1. inspect [command]: inspect\n", filepath.Join(directory, "explicit.yaml"))
+	if got := stdout.String(); got != want {
+		t.Fatalf("Run(check) output = %q, want %q", got, want)
+	}
+}
+
+func TestCheckAcceptsDashPrefixedConfig(t *testing.T) {
+	directory := t.TempDir()
+	t.Chdir(directory)
+	contents := "watches: [{name: incoming, path: ., pipeline: [{name: inspect, program: inspect}]}]\n"
+	if err := os.WriteFile("-pipeline.yaml", []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"check", "--", "-pipeline.yaml"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("Run(check) code = %d, stderr = %q", code, stderr.String())
+	}
+	if want := "Config: " + filepath.Join(directory, "-pipeline.yaml"); !strings.Contains(stdout.String(), want) {
+		t.Fatalf("Run(check) output = %q, want %q", stdout.String(), want)
 	}
 }
 
@@ -276,7 +355,7 @@ watches:
 	}
 
 	var stdout, stderr bytes.Buffer
-	if code := Run([]string{"check", "--config", configs}, &stdout, &stderr); code != 0 {
+	if code := Run([]string{"check", configs}, &stdout, &stderr); code != 0 {
 		t.Fatalf("Run(check directory) code = %d, stderr = %q", code, stderr.String())
 	}
 	output := stdout.String()
@@ -310,7 +389,7 @@ watches:
 	}
 
 	var stdout, stderr bytes.Buffer
-	if code := Run([]string{"check", "--config", configPath}, &stdout, &stderr); code != 1 {
+	if code := Run([]string{"check", configPath}, &stdout, &stderr); code != 1 {
 		t.Fatalf("Run(check invalid) code = %d, want 1; stderr = %q", code, stderr.String())
 	}
 	if stdout.Len() != 0 {
@@ -327,10 +406,10 @@ func TestCheckUsageAndHelp(t *testing.T) {
 	t.Parallel()
 
 	var stdout, stderr bytes.Buffer
-	if code := Run([]string{"check", "unexpected"}, &stdout, &stderr); code != 2 {
+	if code := Run([]string{"check", "first.yaml", "unexpected"}, &stdout, &stderr); code != 2 {
 		t.Fatalf("Run(check positional) code = %d, want 2", code)
 	}
-	if got, want := stderr.String(), "slipway: check does not accept positional arguments\n"; got != want {
+	if got, want := stderr.String(), "slipway: check expects 1 positional argument (config path)\n"; got != want {
 		t.Fatalf("Run(check positional) stderr = %q, want %q", got, want)
 	}
 
@@ -339,7 +418,7 @@ func TestCheckUsageAndHelp(t *testing.T) {
 	if code := Run([]string{"check", "--help"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("Run(check --help) code = %d, want 0", code)
 	}
-	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "Usage: slipway check [--raw] [--config path]") {
+	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "Usage: slipway check [--raw] <config>") {
 		t.Fatalf("Run(check --help) stdout/stderr = %q / %q", stdout.String(), stderr.String())
 	}
 
@@ -348,7 +427,7 @@ func TestCheckUsageAndHelp(t *testing.T) {
 	if code := Run([]string{"--help"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("Run(--help) code = %d, want 0", code)
 	}
-	if !strings.Contains(stdout.String(), "slipway check [--raw] [--config path]") {
+	if !strings.Contains(stdout.String(), "slipway check [--raw] <config>") {
 		t.Fatalf("Run(--help) output = %q, want check command", stdout.String())
 	}
 }

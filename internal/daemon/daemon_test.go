@@ -1,7 +1,9 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -14,6 +16,47 @@ import (
 	"github.com/GerhardOfRivia/slipway/internal/config"
 	"github.com/GerhardOfRivia/slipway/internal/queue"
 )
+
+func TestRunWarnsAboutDockerTerminalFlags(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	incoming := filepath.Join(root, "incoming")
+	if err := os.Mkdir(incoming, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{
+		Queue:    config.QueueConfig{Workers: 1},
+		Database: config.DatabaseConfig{Path: filepath.Join(root, "queue.db")},
+		Watches: []config.WatchConfig{{
+			Name: "incoming", Path: incoming,
+			Pipeline: []config.CommandConfig{{
+				Name: "process", Executor: config.ExecutorDocker,
+				Image: "image", ContainerArgs: []string{"-it"},
+			}},
+		}},
+	}
+	cfg.ApplyDefaults()
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("TTY warning must not reject the config: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stop := time.AfterFunc(50*time.Millisecond, cancel)
+	defer stop.Stop()
+	var logs bytes.Buffer
+	err := Run(ctx, cfg, slog.New(slog.NewTextHandler(&logs, nil)))
+	if err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run: %v", err)
+	}
+	for _, want := range []string{"level=WARN", "no interactive stdin or TTY", "watch=incoming", "step=1", "command=process"} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("startup log %q does not contain %q", logs.String(), want)
+		}
+	}
+	if strings.Count(logs.String(), "level=WARN") != 1 {
+		t.Errorf("expected one startup warning: %s", logs.String())
+	}
+}
 
 func TestRunProcessesExistingFileAndStops(t *testing.T) {
 	directory := t.TempDir()

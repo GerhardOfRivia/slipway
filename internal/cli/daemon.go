@@ -13,7 +13,6 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/GerhardOfRivia/slipway/internal/config"
 	"github.com/GerhardOfRivia/slipway/internal/control"
 	"github.com/GerhardOfRivia/slipway/internal/webui"
 )
@@ -61,16 +60,16 @@ func RunDaemonVersion(args []string, stdout, stderr io.Writer, version string) i
 }
 
 func daemonCommand(args []string, stderr io.Writer, version string) error {
-	flags := newFlagSet("slipwayd", stderr, "slipwayd [--config path] [--socket path] [--web-listen address] [--log-level level]")
-	configPath := flags.String("config", configPathDefault(), "optional YAML file or directory to start when the daemon starts")
+	flags := newFlagSet("slipwayd", stderr, "slipwayd [--socket path] [--web-listen address] [--log-level level] [--state-dir path]")
 	socketPath := flags.String("socket", "", "control socket (defaults to SLIPWAY_SOCKET or a per-user path)")
 	webListen := flags.String("web-listen", webListenDefault(), "optional loopback or wildcard address for the web dashboard (for example 127.0.0.1:8080)")
 	logLevel := flags.String("log-level", "info", "debug, info, warn, or error")
-	if err := flags.Parse(args); err != nil {
+	stateDirectory := flags.String("state-dir", "", "persistent daemon state (defaults to SLIPWAY_STATE_DIR or the per-user state directory)")
+	if err := parseFlags(flags, args); err != nil {
 		return err
 	}
 	if flags.NArg() != 0 {
-		return usageError{message: "does not accept positional arguments"}
+		return usageError{message: "does not accept positional arguments; register instances with slipway start <config> [name]"}
 	}
 
 	level, err := parseLogLevel(*logLevel)
@@ -95,10 +94,21 @@ func daemonCommand(args []string, stderr io.Writer, version string) error {
 		case <-ctx.Done():
 		}
 	}()
-	manager, err := control.NewManager(control.Options{Context: ctx, Logger: logger})
+	statePath, err := control.ResolveStateDirectory(*stateDirectory)
 	if err != nil {
 		return err
 	}
+	manager, err := control.NewManager(control.Options{Context: ctx, Logger: logger, StateDirectory: statePath})
+	if err != nil {
+		return err
+	}
+	defer func() {
+		shutdownContext, cancel := context.WithTimeout(context.Background(), controlTimeout)
+		defer cancel()
+		if err := manager.Shutdown(shutdownContext); err != nil {
+			logger.Error("daemon cleanup failed", "error", err)
+		}
+	}()
 	server, err := control.NewServer(*socketPath, manager, logger)
 	if err != nil {
 		return err
@@ -114,27 +124,19 @@ func daemonCommand(args []string, stderr io.Writer, version string) error {
 	serveStarted := false
 	defer func() {
 		// Serve owns network and socket cleanup once entered. Before that point,
-		// bootstrap failures still need an explicit close.
+		// restore failures still need an explicit close.
 		if !serveStarted {
 			_ = webServer.Close()
 			_ = server.Close()
 		}
 	}()
 
-	bootstrapCount := 0
-	if selection := strings.TrimSpace(*configPath); selection != "" {
-		paths, err := config.Discover(selection)
-		if err != nil {
-			return err
-		}
-		instances, err := manager.StartManyContext(ctx, paths, "")
-		if err != nil {
-			return err
-		}
-		bootstrapCount = len(instances)
+	restoredCount, err := manager.Restore(ctx)
+	if err != nil {
+		return err
 	}
 
-	logger.Info("control daemon listening", "socket", server.Path(), "bootstrapped_instances", bootstrapCount)
+	logger.Info("control daemon listening", "socket", server.Path(), "state_directory", statePath, "restored_instances", restoredCount)
 	if webServer != nil {
 		logger.Info("web dashboard listening", "address", webServer.Address(), "token_file", webServer.TokenPath())
 	}
@@ -186,11 +188,19 @@ func printDaemonUsage(output io.Writer) {
 	fmt.Fprintln(output, `slipway daemon manages file-watching instances.
 
 Usage:
-  slipwayd [--config path] [--socket path] [--web-listen address] [--log-level level]
+  slipwayd [--socket path] [--web-listen address] [--log-level level] [--state-dir path]
   slipwayd version
 
-With --config or SLIPWAY_CONFIG, slipwayd bootstraps one YAML file or every YAML
-file in the selected directory. Without either, it starts with no instances.`)
+Starts the daemon; no existing slipwayd is required.
+The version command prints the version without starting the daemon.
+
+Register instances separately with: slipway start <config> [name]
+Registered instances and their queue databases persist in --state-dir,
+SLIPWAY_STATE_DIR, or $XDG_STATE_HOME/slipway (default ~/.local/state/slipway).
+Every start restores saved configurations whose desired state is running.
+Explicitly stopped instances stay stopped; a new state directory starts empty.
+Config paths, directories, and instance names are not accepted as daemon arguments.
+SLIPWAY_CONFIG is not used.`)
 }
 
 func webListenDefault() string {

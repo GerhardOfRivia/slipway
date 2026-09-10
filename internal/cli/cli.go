@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -34,7 +33,16 @@ type loadedConfig struct {
 type configuredStore struct {
 	path   string
 	config *config.Config
-	store  *queue.Store
+	store  queueReader
+}
+
+type queueReader interface {
+	Close() error
+	Counts(context.Context) (queue.QueueCounts, error)
+	ListJobs(context.Context, queue.JobFilter) ([]queue.Job, error)
+	GetJob(context.Context, int64) (*queue.Job, error)
+	ListRuns(context.Context, int64) ([]queue.Run, error)
+	ListCommands(context.Context, int64) ([]queue.CommandExecution, error)
 }
 
 type listedJob struct {
@@ -78,8 +86,8 @@ func RunVersion(args []string, stdout, stderr io.Writer, version string) int {
 		err = checkCommand(args[1:], stdout, stderr)
 	case "parse":
 		err = parseCommand(args[1:], stdout, stderr)
-	case "run":
-		err = runCommand(args[1:], stdout, stderr)
+	case "test":
+		err = testCommand(args[1:], stdout, stderr)
 	case "start":
 		err = startCommand(args[1:], stdout, stderr)
 	case "ps":
@@ -114,16 +122,16 @@ func RunVersion(args []string, stdout, stderr io.Writer, version string) int {
 }
 
 func statusCommand(args []string, stdout, stderr io.Writer) error {
-	flags := newFlagSet("status", stderr, "slipway status [--config path]")
-	configPath := flags.String("config", configPathDefault(), "YAML configuration file or directory")
-	if err := flags.Parse(args); err != nil {
+	flags := newFlagSet("status", stderr, "slipway status <config>")
+	inspection := inspectionFlags(flags)
+	if err := parseFlags(flags, args); err != nil {
 		return err
 	}
-	if flags.NArg() != 0 {
-		return usageError{message: "status does not accept positional arguments"}
+	if err := requireArguments(flags, "config path"); err != nil {
+		return err
 	}
 
-	stores, err := openStores(*configPath)
+	stores, err := inspection.open(flags.Arg(0))
 	if err != nil {
 		return err
 	}
@@ -167,21 +175,21 @@ func statusCommand(args []string, stdout, stderr io.Writer) error {
 }
 
 func queueCommand(args []string, stdout, stderr io.Writer) error {
-	flags := newFlagSet("queue", stderr, "slipway queue [--config path] [--watch name] [--limit n]")
-	configPath := flags.String("config", configPathDefault(), "YAML configuration file or directory")
+	flags := newFlagSet("queue", stderr, "slipway queue <config> [--watch name] [--limit n]")
+	inspection := inspectionFlags(flags)
 	watchName := flags.String("watch", "", "filter by watch name")
 	limit := flags.Int("limit", 100, "maximum jobs to display")
-	if err := flags.Parse(args); err != nil {
+	if err := parseFlags(flags, args); err != nil {
 		return err
 	}
-	if flags.NArg() != 0 {
-		return usageError{message: "queue does not accept positional arguments"}
+	if err := requireArguments(flags, "config path"); err != nil {
+		return err
 	}
 	if *limit <= 0 {
 		return usageError{message: "queue --limit must be greater than zero"}
 	}
 
-	stores, err := openStores(*configPath)
+	stores, err := inspection.open(flags.Arg(0))
 	if err != nil {
 		return err
 	}
@@ -208,16 +216,16 @@ func queueCommand(args []string, stdout, stderr io.Writer) error {
 }
 
 func jobsCommand(args []string, stdout, stderr io.Writer) error {
-	flags := newFlagSet("jobs", stderr, "slipway jobs [--config path] [--status status] [--watch name] [--limit n]")
-	configPath := flags.String("config", configPathDefault(), "YAML configuration file or directory")
+	flags := newFlagSet("jobs", stderr, "slipway jobs <config> [--status status] [--watch name] [--limit n]")
+	inspection := inspectionFlags(flags)
 	statusText := flags.String("status", "", "queued, running, succeeded, or failed")
 	watchName := flags.String("watch", "", "filter by watch name")
 	limit := flags.Int("limit", 100, "maximum jobs to display")
-	if err := flags.Parse(args); err != nil {
+	if err := parseFlags(flags, args); err != nil {
 		return err
 	}
-	if flags.NArg() != 0 {
-		return usageError{message: "jobs does not accept positional arguments"}
+	if err := requireArguments(flags, "config path"); err != nil {
+		return err
 	}
 	if *limit <= 0 {
 		return usageError{message: "jobs --limit must be greater than zero"}
@@ -227,7 +235,7 @@ func jobsCommand(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 
-	stores, err := openStores(*configPath)
+	stores, err := inspection.open(flags.Arg(0))
 	if err != nil {
 		return err
 	}
@@ -253,9 +261,9 @@ func jobsCommand(args []string, stdout, stderr io.Writer) error {
 }
 
 func jobCommand(args []string, stdout, stderr io.Writer) error {
-	flags := newFlagSet("job", stderr, "slipway job [--config path] <id>")
-	configPath := flags.String("config", configPathDefault(), "YAML configuration file or directory")
-	if err := flags.Parse(args); err != nil {
+	flags := newFlagSet("job", stderr, "slipway job <config> <id>")
+	inspection := inspectionFlags(flags)
+	if err := parseFlags(flags, args); err != nil {
 		return err
 	}
 	id, err := oneJobID(flags)
@@ -263,7 +271,7 @@ func jobCommand(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 
-	stores, err := openStores(*configPath)
+	stores, err := inspection.open(flags.Arg(0))
 	if err != nil {
 		return err
 	}
@@ -312,9 +320,9 @@ func jobCommand(args []string, stdout, stderr io.Writer) error {
 }
 
 func logsCommand(args []string, stdout, stderr io.Writer) error {
-	flags := newFlagSet("logs", stderr, "slipway logs [--config path] <id>")
-	configPath := flags.String("config", configPathDefault(), "YAML configuration file or directory")
-	if err := flags.Parse(args); err != nil {
+	flags := newFlagSet("logs", stderr, "slipway logs <config> <id>")
+	inspection := inspectionFlags(flags)
+	if err := parseFlags(flags, args); err != nil {
 		return err
 	}
 	id, err := oneJobID(flags)
@@ -322,7 +330,7 @@ func logsCommand(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 
-	stores, err := openStores(*configPath)
+	stores, err := inspection.open(flags.Arg(0))
 	if err != nil {
 		return err
 	}
@@ -353,11 +361,18 @@ func logsCommand(args []string, stdout, stderr io.Writer) error {
 }
 
 func loadConfigs(selection string) ([]loadedConfig, error) {
-	paths, err := config.Discover(selection)
+	paths, err := discoverConfigs(selection)
 	if err != nil {
 		return nil, err
 	}
 	return loadConfigPaths(paths)
+}
+
+func discoverConfigs(selection string) ([]string, error) {
+	if strings.TrimSpace(selection) == "" {
+		return nil, usageError{message: "config path is required"}
+	}
+	return config.Discover(selection)
 }
 
 func loadConfigPaths(paths []string) ([]loadedConfig, error) {
@@ -393,7 +408,7 @@ func openStores(selection string) ([]configuredStore, error) {
 				return nil, fmt.Errorf("compare database paths for %s and %s: %w", owner.configPath, item.path, err)
 			}
 			if equivalent {
-				return nil, fmt.Errorf("configs %s and %s use the same database %s; select one with --config or use distinct databases", owner.configPath, item.path, databasePath)
+				return nil, fmt.Errorf("configs %s and %s use the same database %s; pass one config path or use distinct databases", owner.configPath, item.path, databasePath)
 			}
 		}
 		databaseOwners = append(databaseOwners, databaseOwner{configPath: item.path, databasePath: databasePath})
@@ -431,7 +446,7 @@ func findJob(ctx context.Context, stores []configuredStore, id int64) (*configur
 			return nil, nil, fmt.Errorf("find job in %s: %w", stores[i].path, err)
 		}
 		if matchedStore != nil {
-			return nil, nil, fmt.Errorf("job %d exists in both %s and %s; select its config with --config", id, matchedStore.path, stores[i].path)
+			return nil, nil, fmt.Errorf("job %d exists in both %s and %s; pass its config path explicitly", id, matchedStore.path, stores[i].path)
 		}
 		matchedStore = &stores[i]
 		matchedJob = job
@@ -467,24 +482,80 @@ func newFlagSet(name string, output io.Writer, usage string) *flag.FlagSet {
 	flags.Usage = func() {
 		fmt.Fprintln(output, "Usage:", usage)
 		flags.PrintDefaults()
+		switch name {
+		case "start", "ps", "stop":
+			fmt.Fprintln(output, "\nRequires a running slipwayd. Start it separately with: slipwayd")
+		case "test":
+			fmt.Fprintln(output, "\nRuns in the foreground with its own queue database. Does not contact slipwayd.")
+		case "check", "parse":
+			fmt.Fprintln(output, "\nNo slipwayd required. Does not contact the daemon or execute pipeline commands.")
+		case "status", "queue", "jobs", "job", "logs":
+			fmt.Fprintln(output, "\nSelect a managed instance by name, ID, or config path. Requires slipwayd.")
+			fmt.Fprintln(output, "Use --local with a config path to inspect a standalone run's database.")
+		case "slipwayd":
+			fmt.Fprintln(output, "\nStarts the daemon; no existing slipwayd is required.")
+		}
 	}
 	return flags
 }
 
-func configPathDefault() string {
-	if value := strings.TrimSpace(os.Getenv("SLIPWAY_CONFIG")); value != "" {
-		return value
+// parseFlags accepts options before or after positional arguments. A standalone
+// -- ends option parsing, including for paths or names that begin with a dash.
+func parseFlags(flags *flag.FlagSet, args []string) error {
+	var options, positional []string
+	for index := 0; index < len(args); index++ {
+		argument := args[index]
+		if argument == "--" {
+			positional = append(positional, args[index+1:]...)
+			break
+		}
+		if argument == "-" || !strings.HasPrefix(argument, "-") {
+			positional = append(positional, argument)
+			continue
+		}
+		options = append(options, argument)
+		name := strings.TrimPrefix(strings.TrimPrefix(argument, "-"), "-")
+		name, _, hasValue := strings.Cut(name, "=")
+		option := flags.Lookup(name)
+		if option == nil {
+			// Let flag report unknown options and handle -h/--help normally.
+			return flags.Parse(options)
+		}
+		boolean, isBoolean := option.Value.(interface{ IsBoolFlag() bool })
+		if !hasValue && !(isBoolean && boolean.IsBoolFlag()) {
+			if index+1 == len(args) {
+				return flags.Parse(options)
+			}
+			index++
+			options = append(options, args[index])
+		}
 	}
-	return ""
+	return flags.Parse(append(append(options, "--"), positional...))
+}
+
+func requireArguments(flags *flag.FlagSet, names ...string) error {
+	if flags.NArg() > len(names) {
+		noun := "arguments"
+		if len(names) == 1 {
+			noun = "argument"
+		}
+		return usageError{message: fmt.Sprintf("%s expects %d positional %s (%s)", flags.Name(), len(names), noun, strings.Join(names, ", "))}
+	}
+	for index, name := range names {
+		if strings.TrimSpace(flags.Arg(index)) == "" {
+			return usageError{message: name + " is required"}
+		}
+	}
+	return nil
 }
 
 func oneJobID(flags *flag.FlagSet) (int64, error) {
-	if flags.NArg() != 1 {
-		return 0, usageError{message: flags.Name() + " requires exactly one job ID"}
+	if err := requireArguments(flags, "config path", "job ID"); err != nil {
+		return 0, err
 	}
-	id, err := strconv.ParseInt(flags.Arg(0), 10, 64)
+	id, err := strconv.ParseInt(flags.Arg(1), 10, 64)
 	if err != nil || id <= 0 {
-		return 0, usageError{message: fmt.Sprintf("invalid job ID %q", flags.Arg(0))}
+		return 0, usageError{message: fmt.Sprintf("invalid job ID %q", flags.Arg(1))}
 	}
 	return id, nil
 }
@@ -598,24 +669,22 @@ func printUsage(output io.Writer) {
 	fmt.Fprintln(output, `slipway watches files and runs durable command pipelines.
 
 Usage:
+
+No slipwayd required:
   slipway version
-  slipway check [--raw] [--config path]
+  slipway check [--raw] <config>
   slipway parse [--name name] -- <program> [argument ...]
-  slipway run [--rm] [--config path] [--name name] [--socket path]
-  slipway start [--config path] [--name name] [--socket path]
+  slipway test <config>
+
+Requires a running slipwayd:
+  slipway start <config-or-instance> [name] [--socket path]
   slipway ps [--all] [--socket path]
   slipway stop [--socket path] <id-or-name> [id-or-name ...]
-  slipway status [--config path]
-  slipway queue [--config path]
-  slipway jobs [--status status] [--watch name] [--config path]
-  slipway job [--config path] <id>
-  slipway logs [--config path] <id>
-
-For check, run, start, and inspection commands, --config and SLIPWAY_CONFIG may
-select one YAML file or a directory of YAML files. With neither, slipway loads
-configs from /etc/slipway.d and ~/.local/slipway.d, then falls back to ./slipway.yaml.
-Run uses a reachable daemon and otherwise logs that it is running daemonless.
-With --rm, daemon-managed run instances are removed after they exit. Start, ps,
-and stop require a daemon started separately with slipwayd.
-Parse prints a pipeline YAML fragment without executing the supplied command.`)
+  slipway status <instance-or-config> [--socket path]
+  slipway queue <instance-or-config> [--socket path]
+  slipway jobs <instance-or-config> [--status status] [--watch name] [--socket path]
+  slipway job <instance-or-config> <id> [--socket path]
+  slipway logs <instance-or-config> <id> [--socket path]
+  Start the daemon separately with: slipwayd
+`)
 }

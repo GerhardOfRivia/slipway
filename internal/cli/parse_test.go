@@ -74,6 +74,25 @@ func TestParseDockerRunUsesStructuredFields(t *testing.T) {
 	}
 }
 
+func TestParseWarnsAboutDockerTerminalFlagsWithoutChangingArgs(t *testing.T) {
+	t.Parallel()
+	for _, args := range [][]string{
+		{"run", "-it", "image", "sh"},
+		{"run", "--it", "image", "sh"},
+		{"run", "--interactive", "--tty", "image"},
+		{"container", "exec", "-ti", "container", "sh"},
+	} {
+		code, stdout, stderr := runParseCLI(append([]string{"parse", "--", "docker"}, args...)...)
+		if code != 0 || !strings.Contains(stderr, "warning:") || !strings.Contains(stderr, "TTY") || !strings.Contains(stderr, "Remove") {
+			t.Fatalf("parse %q: code=%d, stderr=%q", args, code, stderr)
+		}
+		step := loadGeneratedPipeline(t, stdout)
+		if got := step.ExecutionArgs(); !reflect.DeepEqual(got, args) {
+			t.Errorf("parse changed arguments: got=%q, want=%q", got, args)
+		}
+	}
+}
+
 func TestParseDockerRunTreatsLeadingOptionAsDefaultCommandArgs(t *testing.T) {
 	t.Parallel()
 	invocation := []string{
@@ -138,6 +157,7 @@ func TestParsePodmanRunUsesStructuredFieldsAndProgramOverride(t *testing.T) {
 func TestParseContainerRunRecognizesArgumentBoundaries(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
+		wantWarning     bool
 		name            string
 		program         string
 		args            []string
@@ -162,6 +182,7 @@ func TestParseContainerRunRecognizesArgumentBoundaries(t *testing.T) {
 		},
 		{
 			name:            "short cluster attached value and negative value",
+			wantWarning:     true,
 			program:         "docker",
 			args:            []string{"run", "-it", "-p8080:80", "--pids-limit", "-1", "image", "tool", "--"},
 			wantContainer:   []string{"-it", "-p8080:80", "--pids-limit", "-1"},
@@ -212,7 +233,7 @@ func TestParseContainerRunRecognizesArgumentBoundaries(t *testing.T) {
 			t.Parallel()
 			invocation := append([]string{"parse", "--", test.program}, test.args...)
 			code, stdout, stderr := runParseCLI(invocation...)
-			if code != 0 || stderr != "" {
+			if code != 0 || (stderr != "") != test.wantWarning || (test.wantWarning && !strings.Contains(stderr, "no interactive stdin or TTY")) {
 				t.Fatalf("Run(%v) = code %d, stderr %q", invocation, code, stderr)
 			}
 			step := decodeGeneratedPipeline(t, stdout).Pipeline[0]
@@ -230,6 +251,7 @@ func TestParseContainerRunRecognizesArgumentBoundaries(t *testing.T) {
 func TestParseContainerRunKeepsUnrepresentableOptionGroups(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
+		wantWarning   bool
 		name          string
 		program       string
 		args          []string
@@ -298,8 +320,9 @@ func TestParseContainerRunKeepsUnrepresentableOptionGroups(t *testing.T) {
 			wantContainer: []string{"--future=value", "--env", "MODE=batch", "--mount", "type=bind,source=/host,target=/data"},
 		},
 		{
-			name:    "clustered environment and volume stay in place",
-			program: "docker",
+			name:        "clustered environment and volume stay in place",
+			program:     "docker",
+			wantWarning: true,
 			args: []string{"run", "-ieMODE=test", "-itv/host:/data", "--env", "EXTRA=yes",
 				"--mount", "type=bind,source=/other,target=/other", "image"},
 			wantContainer: []string{"-ieMODE=test", "-itv/host:/data", "--env", "EXTRA=yes",
@@ -317,7 +340,7 @@ func TestParseContainerRunKeepsUnrepresentableOptionGroups(t *testing.T) {
 			t.Parallel()
 			invocation := append([]string{"parse", "--", test.program}, test.args...)
 			code, stdout, stderr := runParseCLI(invocation...)
-			if code != 0 || stderr != "" {
+			if code != 0 || (stderr != "") != test.wantWarning || (test.wantWarning && !strings.Contains(stderr, "no interactive stdin or TTY")) {
 				t.Fatalf("Run(%v) = code %d, stderr %q", invocation, code, stderr)
 			}
 			step := decodeGeneratedPipeline(t, stdout).Pipeline[0]

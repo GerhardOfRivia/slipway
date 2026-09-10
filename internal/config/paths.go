@@ -17,17 +17,19 @@ const (
 	maxCanonicalPathSymlinkDepth = 255
 )
 
-func resolveConfiguredPaths(cfg *Config, filename string) error {
+func resolveConfiguredPaths(cfg *Config, filename string, resolveDatabase bool) error {
 	configFile, err := filepath.Abs(filename)
 	if err != nil {
 		return fmt.Errorf("resolve config file path: %w", err)
 	}
 	configDirectory := filepath.Dir(filepath.Clean(configFile))
 
-	databasePath := resolveRelativePath(configDirectory, cfg.Database.Path)
-	cfg.Database.Path, err = CanonicalDatabasePath(databasePath)
-	if err != nil {
-		return fmt.Errorf("resolve database.path: %w", err)
+	if resolveDatabase {
+		databasePath := resolveRelativePath(configDirectory, cfg.Database.Path)
+		cfg.Database.Path, err = CanonicalDatabasePath(databasePath)
+		if err != nil {
+			return fmt.Errorf("resolve database.path: %w", err)
+		}
 	}
 
 	for watchIndex := range cfg.Watches {
