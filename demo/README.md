@@ -45,7 +45,7 @@ slipway start slipway.yaml
 
 The daemon assigns its own queue database and remembers this instance across
 restarts. `slipway stop demo` stops it persistently; `slipway start demo` resumes
-the saved configuration.
+the saved configuration. Note the name defaults to the config basename.
 
 ### ps
 
